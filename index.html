@@ -70,8 +70,12 @@
   .stop-mode label { padding: 5px 10px; cursor: pointer; font-size: 12px; color: var(--muted); background: var(--card); }
   .stop-mode input { display: none; }
   .stop-mode label:has(input:checked) { background: var(--accent); color: var(--accent-ink); }
-  .stop-fields { display: flex; gap: 8px; align-items: end; flex: 1; min-width: 200px; }
+  .stop-fields { display: flex; gap: 8px; align-items: end; flex: 1; min-width: 200px; flex-wrap: wrap; }
   .stop-fields .field { flex: 1; min-width: 100px; }
+  .stop-country { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; align-self: center; }
+  .stop-country label { padding: 5px 8px; cursor: pointer; font-size: 11px; color: var(--muted); background: var(--card); white-space: nowrap; }
+  .stop-country input { display: none; }
+  .stop-country label:has(input:checked) { background: var(--accent); color: var(--accent-ink); }
   .stop-suggest-label { color: var(--muted); font-size: 13px; font-style: italic; padding: 10px 0; }
   .remove-stop { background: none; border: none; color: var(--err); cursor: pointer; font-size: 20px; padding: 4px 8px; }
 
@@ -144,10 +148,10 @@
     </div>
 
     <!-- Stops -->
-    <div class="section-label">Stops along the way</div>
+    <div class="section-label">City stops along the way <span style="font-weight:400;text-transform:none;letter-spacing:0">(not layovers)</span></div>
     <div class="stops-section" id="stops-section"></div>
-    <button type="button" class="add-btn" id="add-stop" style="margin-bottom:4px">+ Add a stop</button>
-    <div class="sub" style="margin-bottom:8px">Up to 4 intermediate stops. Use "Suggest for me" to get hub recommendations based on geography.</div>
+    <button type="button" class="add-btn" id="add-stop" style="margin-bottom:4px">+ Add a city stop</button>
+    <div class="sub" style="margin-bottom:8px">Up to 4 city stops where you intentionally break your trip. Flight layovers/connections don't count — those are part of each leg.</div>
 
     <!-- Options -->
     <div class="grid-options">
@@ -304,11 +308,17 @@ function renderStops() {
   const container = $("stops-section");
   container.innerHTML = stops.map((s, i) => {
     const uid = `stop-${i}`;
+    const countryName = uid + "-country";
     return `<div class="stop-row" data-stop-idx="${i}">
       <span class="stop-num">${i + 1}</span>
       <div class="stop-mode">
         <label><input type="radio" name="${uid}-mode" value="fixed" ${s.mode === "fixed" ? "checked" : ""} data-stop-idx="${i}" data-mode-radio><span>I know where</span></label>
         <label><input type="radio" name="${uid}-mode" value="suggest" ${s.mode === "suggest" ? "checked" : ""} data-stop-idx="${i}" data-mode-radio><span>Suggest for me</span></label>
+      </div>
+      <div class="stop-country">
+        <label><input type="radio" name="${countryName}" value="any" ${s.country === "any" ? "checked" : ""} data-stop-idx="${i}" data-country-radio><span>Any country</span></label>
+        <label><input type="radio" name="${countryName}" value="same" ${s.country === "same" ? "checked" : ""} data-stop-idx="${i}" data-country-radio><span>Same country</span></label>
+        <label><input type="radio" name="${countryName}" value="different" ${s.country === "different" ? "checked" : ""} data-stop-idx="${i}" data-country-radio><span>Different country</span></label>
       </div>
       <div class="stop-fields">
         ${s.mode === "fixed" ? `
@@ -321,13 +331,16 @@ function renderStops() {
             <label>Date</label>
             <input type="date" class="stop-date" value="${esc(s.date || "")}" data-stop-idx="${i}" min="${$("depart").value}">
           </div>
-        ` : `<div class="stop-suggest-label">Best stopover cities will be recommended based on your route</div>`}
+        ` : `<div class="stop-suggest-label">Best stopover cities will be recommended based on your route and country preference</div>`}
       </div>
       <button type="button" class="remove-stop" data-stop-idx="${i}">×</button>
     </div>`;
   }).join("");
   container.querySelectorAll("[data-mode-radio]").forEach((r) => {
     r.addEventListener("change", () => { stops[+r.dataset.stopIdx].mode = r.value; renderStops(); });
+  });
+  container.querySelectorAll("[data-country-radio]").forEach((r) => {
+    r.addEventListener("change", () => { stops[+r.dataset.stopIdx].country = r.value; });
   });
   container.querySelectorAll(".stop-airport").forEach((inp) => {
     const idx = +inp.dataset.stopIdx;
@@ -343,7 +356,7 @@ function renderStops() {
   });
   $("add-stop").style.display = stops.length >= MAX_STOPS ? "none" : "";
 }
-$("add-stop").addEventListener("click", () => { if (stops.length < MAX_STOPS) { stops.push({ mode: "fixed", airport: "", date: "" }); renderStops(); } });
+$("add-stop").addEventListener("click", () => { if (stops.length < MAX_STOPS) { stops.push({ mode: "fixed", airport: "", date: "", country: "any" }); renderStops(); } });
 
 // ---------------------------------------------------------------------------
 // Geographic helpers
@@ -364,19 +377,32 @@ function isBetween(hubCode, origCode, destCode, margin = 0.3) {
   return via <= direct * (1 + margin);
 }
 
-function suggestHubs(origCode, destCode, count = 5) {
-  const candidates = hubCities.filter(h =>
-    h.code !== origCode && h.code !== destCode && isBetween(h.code, origCode, destCode)
-  );
-  // Score by routing efficiency (lower detour = better)
+function suggestHubs(origCode, destCode, countryPref = "any", count = 5) {
   const orig = airportMap[origCode], dest = airportMap[destCode];
+  const origCountry = orig ? orig.country : null;
+
+  const candidates = hubCities.filter(h => {
+    if (h.code === origCode || h.code === destCode) return false;
+    if (!isBetween(h.code, origCode, destCode)) return false;
+    // Apply country filter
+    if (countryPref !== "any" && origCountry) {
+      const hubAirport = airportMap[h.code];
+      if (hubAirport) {
+        if (countryPref === "same" && hubAirport.country !== origCountry) return false;
+        if (countryPref === "different" && hubAirport.country === origCountry) return false;
+      }
+    }
+    return true;
+  });
+
+  // Score by routing efficiency (lower detour = better)
   if (!orig || !dest) return candidates.slice(0, count);
   const direct = haversine(orig.lat, orig.lon, dest.lat, dest.lon) || 1;
   const scored = candidates.map(h => {
     const hub = airportMap[h.code];
     if (!hub) return { ...h, score: 999 };
     const via = haversine(orig.lat, orig.lon, hub.lat, hub.lon) + haversine(hub.lat, hub.lon, dest.lat, dest.lon);
-    return { ...h, score: via / direct, distFromOrig: haversine(orig.lat, orig.lon, hub.lat, hub.lon) };
+    return { ...h, score: via / direct, distFromOrig: haversine(orig.lat, orig.lon, hub.lat, hub.lon), country: hub.country };
   });
   scored.sort((a, b) => a.score - b.score);
   return scored.slice(0, count);
@@ -503,7 +529,10 @@ function buildItinerary() {
   // Get hub suggestions for suggest slots
   const suggestions = [];
   if (suggestSlots.length > 0) {
-    const hubs = suggestHubs(origin, dest, 5);
+    // Use country preference from the first suggest stop
+    const suggestStop = stops.find(s => s.mode === "suggest");
+    const countryPref = suggestStop ? (suggestStop.country || "any") : "any";
+    const hubs = suggestHubs(origin, dest, countryPref, 5);
     suggestions.push(...hubs);
   }
 
@@ -635,10 +664,12 @@ function renderItinerary(legs, cabin, adults, suggestions) {
       </div>`;
     suggestions.forEach((hub, i) => {
       const effPct = Math.round((hub.score - 1) * 100);
+      const hubAirport = airportMap[hub.code];
+      const countryLabel = hubAirport ? hubAirport.country : "";
       html += `<div class="itin-leg" style="padding:10px 16px">
         <span style="font-weight:700;color:var(--accent);margin-right:8px">${i + 1}.</span>
         <strong>${esc(hub.name)} (${esc(hub.code)})</strong>
-        <span class="sub" style="margin-left:8px">${esc(hub.region)} · +${effPct}% detour</span>
+        <span class="sub" style="margin-left:8px">${esc(countryLabel)} · ${esc(hub.region)} · +${effPct}% detour</span>
       </div>`;
     });
     html += `</div>`;
