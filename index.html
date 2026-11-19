@@ -150,13 +150,13 @@
     .stop-num::before { content: "Stop "; }
     .remove-stop { position: absolute; top: 2px; right: 2px; }
     .stop-mode, .stop-country { display: flex; width: 100%; align-self: stretch; }
-    .stop-mode label, .stop-country label { flex: 1 1 0; text-align: center; padding: 10px 4px; font-size: 13px; white-space: normal; line-height: 1.2; display: flex; align-items: center; justify-content: center; }
+    .stop-mode label, .stop-country label { flex: 1 1 0; text-align: center; padding: 10px 4px; min-height: 44px; font-size: 13px; white-space: normal; line-height: 1.2; display: flex; align-items: center; justify-content: center; }
     .stop-mode label + label, .stop-country label + label { border-left: 1px solid var(--line); }
     .stop-fields { min-width: 0; }
     .stop-fields .field { min-width: 0; flex: 1 1 0; }
     .stop-suggest-label { padding: 2px 0; }
 
-    .grid-options { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-options { grid-template-columns: minmax(64px, 1fr) 2fr; gap: 10px; }
     .grid-options .field:last-child { grid-column: 1 / -1; }
     .grid-options .field:last-child label { display: none; }
     button.go { width: 100%; height: 50px; font-size: 16px; }
@@ -177,6 +177,7 @@
 
   @media (max-width: 360px) {
     .grid-dates { grid-template-columns: 1fr; }
+    .grid-options { grid-template-columns: 1fr; }
     .stop-fields { flex-direction: column; align-items: stretch; }
   }
 </style>
