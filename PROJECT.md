@@ -1,107 +1,55 @@
 # Plan My Trip — Multi-Stop Itinerary Planner
 
-A trip planning tool backed by [fast-flights](https://github.com/AWeirdDev/flights), a free library that scrapes Google Flights. Supports single flights, multi-leg itineraries with intermediate stops, alternate airports, and AI-powered stopover suggestions.
+A fully static trip planning tool. Build multi-stop itineraries, get stopover recommendations, and search flights on Google Flights and airline websites — all client-side, no backend required.
 
-## Run it
-
-**Double-click `start.bat`** on Windows — it handles everything (Python check, venv, deps, browser).
-
-Or run manually:
-
-```bash
-cd Plan-My-Trip
-python -m venv .venv && .venv\Scripts\activate   # Linux/Mac: source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app:app --reload
-```
-
-Open http://127.0.0.1:8000
-
-### Demo mode (no network calls)
-
-```bash
-start.bat demo
-```
-
-Or manually: `set FLIGHTS_DEMO=1` then `uvicorn app:app`
+**Live:** [plan-my-trip.pages.dev](https://plan-my-trip.pages.dev)
 
 ## Features
 
-### Simple Search
-- One-way or round-trip between two airports
-- Filter by cabin class, max stops, max price, number of passengers
-- Results with airline booking links, CO2 info, expandable leg details
-
-### Itinerary Builder (new)
 - **Multi-stop trips**: Add up to 4 intermediate stops between departure and arrival
-- **Alternate airports**: Specify 1–3 alternate departure/arrival airports — the tool finds the cheapest combination
-- **Stop suggestions**: Toggle "Suggest for me" on any stop — the tool queries ~40 major hub airports, filters geographically, and ranks by price (50%), flight time (30%), and routing efficiency (20%)
-- **Per-leg booking links**: Each leg of the itinerary gets its own airline booking links
-- **Automatic date distribution**: If you don't specify dates for stops, they're distributed evenly across the trip
-
-### How it decides
-- With 0 stops and no alternates → hits `POST /api/search` (simple search, same as before)
-- With stops or alternates → hits `POST /api/itinerary` (multi-leg search)
-- For "Suggest for me" stops → queries origin→hub and hub→destination for each candidate hub, scores and ranks results
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `GET /` | GET | Serves the UI |
-| `GET /api/airports` | GET | Returns airport data (524 airports) for autocomplete |
-| `POST /api/search` | POST | Simple point-to-point flight search |
-| `POST /api/itinerary` | POST | Multi-leg itinerary search with stops and alternates |
-
-### `POST /api/itinerary` request
-
-```json
-{
-  "departure_airports": ["MCO", "SFB"],
-  "arrival_airports": ["JFK", "EWR", "LGA"],
-  "depart_date": "2025-01-15",
-  "arrive_date": "2025-01-22",
-  "stops": [
-    {"mode": "fixed", "airport": "ATL", "date": "2025-01-18"},
-    {"mode": "suggest", "airport": null, "date": null}
-  ],
-  "seat": "economy",
-  "adults": 1,
-  "children": 0,
-  "max_price": null,
-  "currency": "USD"
-}
-```
+- **Alternate airports**: Specify 1–3 alternate departure/arrival airports — the tool generates search links for all combinations
+- **Stop suggestions**: Toggle "Suggest for me" on any stop — the tool recommends hub cities based on geographic routing efficiency (least detour from the direct route)
+- **Google Flights links**: Each leg gets a direct Google Flights search link
+- **Airline booking links**: Per-leg direct links to 17 airlines (Delta, United, American, JetBlue, Southwest, Alaska, Frontier, British Airways, Lufthansa, Air France, KLM, Emirates, Turkish Airlines, Qatar Airways, Singapore Airlines, Cathay Pacific, Air Canada)
+- **Smart airline selection**: Shows relevant airlines based on route region (US domestic, transatlantic, etc.)
+- **Airport autocomplete**: Search 524 airports by code, city, or name
+- **Light/dark theme**: Follows system preference
 
 ## How it works
 
-```
-Browser (static/index.html)
-   │  POST /api/search  — simple search
-   │  POST /api/itinerary — multi-leg with stops/alternates
-   ▼
-FastAPI (app.py) ── validates input ── 15-min in-memory cache
-   │  fast_flights.create_query(...) → get_flights(...)
-   ▼
-Google Flights (scraped HTML) → parsed → JSON → rendered results
-```
+Everything runs in the browser:
+
+1. User fills in the form: origin, destination, dates, intermediate stops
+2. For "Suggest for me" stops: the app filters 45 major hub airports by geographic position (haversine distance, max 30% detour) and ranks by routing efficiency
+3. The app builds the full itinerary with one leg per segment
+4. Each leg shows clickable links to Google Flights and relevant airlines
+
+No backend, no API keys, no scraping. Just a route planner with booking links.
+
+## Deployment
+
+This is a static site. Deploy to any static host:
+
+**Cloudflare Pages:**
+- Connect the GitHub repo
+- Build command: (none)
+- Build output directory: `/` (root)
+- Deploy
+
+**Or any static host:** Just serve the root directory. No build step needed.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `app.py` | FastAPI backend. `POST /api/search` (simple), `POST /api/itinerary` (multi-leg), `GET /api/airports`. Hub loading, geographic filtering, suggestion scoring. |
-| `static/index.html` | Single-file UI: itinerary form with alternates/stops, autocomplete, result cards, sorting, booking links, light/dark themes. |
-| `static/airports.json` | 524 airports with IATA codes, names, cities, countries, lat/lon. Powers autocomplete and geographic filtering. |
-| `static/hub_cities.json` | 45 major hub airports with region tags. Used for stop suggestions. |
-| `requirements.txt` | `fast-flights==3.1.0`, `fastapi`, `uvicorn`. |
-| `start.bat` | Windows launcher with Python check, venv, deps, port finding, browser opening. |
-| `PROJECT.md` | This file. |
+| `index.html` | The entire app: form, itinerary logic, hub suggestions, booking links, CSS, all in one file |
+| `airports.json` | 524 airports with IATA codes, names, cities, countries, lat/lon. Powers autocomplete + geographic filtering |
+| `hub_cities.json` | 45 major hub airports with region tags. Used for stop suggestions |
+| `screenshot.png` | UI screenshot |
+| `PROJECT.md` | This file |
 
 ## Notes
 
-- **fast-flights** is pinned to 3.1.0. Its API changed between major versions.
-- **Rate limits**: Each itinerary search may issue 5–20 Google Flights queries. The 15-min cache mitigates repeated searches. Suggestion mode is heaviest (~10–15 queries).
-- **Price = sum of legs**: Each leg is priced independently. Total itinerary cost = sum of all legs. This is accurate for separate bookings.
-- **Geographic hub filtering**: Uses haversine distance to avoid nonsensical suggestions (e.g., routing NYC→LA through London). Hubs must be within 30% extra distance of the direct route.
-- **Reliability**: This is an unofficial scraper. Google can change its page or rate-limit. The app shows the error and keeps working.
+- **No prices shown**: This is a route planner, not a fare aggregator. Click the links to see live prices on Google Flights or airline sites.
+- **Geographic hub filtering**: Uses haversine distance to avoid nonsensical suggestions. Hubs must be within 30% extra distance of the direct route.
+- **Each leg booked separately**: The itinerary is a plan for self-transfer trips. Each leg links to its own flight search.
