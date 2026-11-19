@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0f1216" media="(prefers-color-scheme: dark)" />
 <title>Plan My Trip</title>
 <style>
   :root {
@@ -115,6 +117,68 @@
   .empty { text-align: center; color: var(--muted); padding: 40px 0; }
   a { color: var(--accent); }
   footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+
+  /* ---------- Phone layout ---------- */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  button, a, label, input, select { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  input[type="date"] { min-height: 42px; display: block; -webkit-appearance: none; appearance: none; }
+  input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+  @media (max-width: 600px) {
+    header { padding: max(18px, env(safe-area-inset-top)) 16px 4px; }
+    header h1 { font-size: 22px; }
+    header p { font-size: 14px; }
+    main { padding: 10px 12px max(40px, env(safe-area-inset-bottom)); }
+    form { padding: 14px; }
+
+    /* 16px inputs stop iOS Safari from zooming in on focus */
+    input, select { font-size: 16px; padding: 11px 10px; min-height: 46px; }
+    .field label { font-size: 11px; }
+
+    .airport-row .field { min-width: 0; flex: 1 1 0; }
+    .grid-dates { gap: 8px; }
+
+    .alt-row { flex-wrap: nowrap; align-items: end; }
+    .alt-row .field { flex: 1 1 auto; min-width: 0; }
+    .alt-row .remove-alt, .remove-stop { width: 44px; height: 44px; padding: 0; margin: 0 0 1px; font-size: 22px; flex-shrink: 0; }
+
+    .add-btn { display: block; width: 100%; padding: 12px 14px; font-size: 14px; text-align: center; }
+
+    /* Stop cards: stack controls, full-width segmented toggles */
+    .stop-row { position: relative; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+    .stop-num { min-width: 0; padding-right: 48px; }
+    .stop-num::before { content: "Stop "; }
+    .remove-stop { position: absolute; top: 2px; right: 2px; }
+    .stop-mode, .stop-country { display: flex; width: 100%; align-self: stretch; }
+    .stop-mode label, .stop-country label { flex: 1 1 0; text-align: center; padding: 10px 4px; font-size: 13px; white-space: normal; line-height: 1.2; display: flex; align-items: center; justify-content: center; }
+    .stop-mode label + label, .stop-country label + label { border-left: 1px solid var(--line); }
+    .stop-fields { min-width: 0; }
+    .stop-fields .field { min-width: 0; flex: 1 1 0; }
+    .stop-suggest-label { padding: 2px 0; }
+
+    .grid-options { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-options .field:last-child { grid-column: 1 / -1; }
+    .grid-options .field:last-child label { display: none; }
+    button.go { width: 100%; height: 50px; font-size: 16px; }
+
+    .ac-list { max-height: 50vh; }
+    .ac-item { padding: 12px; font-size: 15px; }
+
+    /* Results */
+    .itin-header { padding: 12px 14px; }
+    .itin-route { font-size: 16px; }
+    .itin-leg { padding: 12px 14px; }
+    .itin-leg-route { font-size: 15px; }
+    .book-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .book-link { justify-content: center; text-align: center; min-height: 44px; padding: 8px 10px; }
+    .book-link.gf { grid-column: 1 / -1; font-size: 14px; }
+    .itin-footer { padding: 10px 14px; }
+  }
+
+  @media (max-width: 360px) {
+    .grid-dates { grid-template-columns: 1fr; }
+    .stop-fields { flex-direction: column; align-items: stretch; }
+  }
 </style>
 </head>
 <body>
