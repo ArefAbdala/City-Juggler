@@ -55,6 +55,20 @@
     <button type="button" class="add-btn" id="add-stop">+ Add a city stop</button>
     <div class="sub hint">Up to 4 city stops where you intentionally break your trip. Flight layovers/connections don't count — those are part of each leg.</div>
 
+    <!-- Places to avoid -->
+    <div class="section-label" id="avoid-label">Places to avoid <span class="label-note">(optional)</span></div>
+    <div class="avoid-row">
+      <div class="field ac-wrap">
+        <label for="avoid-input" class="visually-hidden">Add a city, airport or country to avoid</label>
+        <input id="avoid-input" placeholder="City, airport or country" autocapitalize="words" spellcheck="false" aria-describedby="avoid-hint avoid-error">
+        <div class="ac-list" id="avoid-ac"></div>
+      </div>
+      <button type="button" class="ghost-btn" id="avoid-add">Add</button>
+    </div>
+    <div class="sub field-error" id="avoid-error" role="alert"></div>
+    <ul id="avoid-list" class="chips" aria-labelledby="avoid-label" hidden></ul>
+    <div class="sub hint" id="avoid-hint">Avoided cities and countries are never suggested as stops or alternative airports. Choosing an airport avoids its whole city. Connections inside a flight are set by the airline — check them when booking.</div>
+
     <!-- Travellers & options -->
     <div class="section-label">Travellers &amp; options</div>
     <div class="grid-pax">

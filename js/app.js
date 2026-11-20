@@ -2,6 +2,7 @@ import {
   todayISO, addDays, validateStopDates, indexAirports, searchAirports, resolveAirport, airportLabel,
   buildItineraries, googleFlightsUrl, airlineLinks, formatMoney, formatDate, CURRENCIES, CONTINENTS,
   serializeState, parseState, itineraryToText, itineraryToICS,
+  countryList, searchPlaces, resolvePlace, avoidChecker, avoidLabel, MAX_AVOID,
 } from "./lib.js";
 
 const $ = (id) => document.getElementById(id);
@@ -10,8 +11,8 @@ const extIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 const STORAGE_KEY = "plan-my-trip:last-search";
 const MAX_ALTS = 3, MAX_STOPS = 4, TOP_AIRLINES = 4;
 
-let airports = [], airportMap = {}, hubs = [], hubSet = new Set(), dataReady = false;
-let depAlts = [], arrAlts = [], stops = [];
+let airports = [], airportMap = {}, hubs = [], hubSet = new Set(), countries = [], dataReady = false;
+let depAlts = [], arrAlts = [], stops = [], avoid = [];
 let lastResults = null; // { itineraries, opts }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +73,8 @@ const dataLoaded = Promise.all([
   fetch("airports.json").then((r) => { if (!r.ok) throw new Error(`airports.json: HTTP ${r.status}`); return r.json(); }),
   fetch("hub_cities.json").then((r) => { if (!r.ok) throw new Error(`hub_cities.json: HTTP ${r.status}`); return r.json(); }),
 ]).then(([ap, hb]) => {
-  airports = ap; airportMap = indexAirports(ap); hubs = hb; hubSet = new Set(hb.map((h) => h.code)); dataReady = true;
+  airports = ap; airportMap = indexAirports(ap); hubs = hb; hubSet = new Set(hb.map((h) => h.code));
+  countries = countryList(ap); dataReady = true; renderAvoid();
   $("go").disabled = false; $("go").textContent = "Plan Trip";
 }).catch((e) => {
   console.error("Failed to load airport data:", e);
@@ -83,7 +85,10 @@ const dataLoaded = Promise.all([
 // ---------------------------------------------------------------------------
 // Autocomplete (ARIA combobox)
 // ---------------------------------------------------------------------------
-function setupAutocomplete(input, list, onPick) {
+const airportItems = (q) => searchAirports(airports, q, 8, hubSet).map((a) => ({ value: a.iata, code: a.iata, detail: `${a.city}, ${a.country} — ${a.name}` }));
+
+/** `onPick(value)` fires on typing and on picking; `onSelect(value)` only when a suggestion is picked. */
+function setupAutocomplete(input, list, onPick, { search = airportItems, onSelect = null } = {}) {
   let active = -1, items = [];
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-autocomplete", "list");
@@ -95,29 +100,29 @@ function setupAutocomplete(input, list, onPick) {
   const render = () => {
     if (!items.length) return close();
     list.innerHTML = items.map((a, i) =>
-      `<div class="ac-item${i === active ? " active" : ""}" role="option" id="${list.id}-opt-${i}" aria-selected="${i === active}" data-code="${a.iata}">
-        <span class="ac-code">${esc(a.iata)}</span>
-        <span class="ac-detail">${esc(a.city)}, ${esc(a.country)} — ${esc(a.name)}</span>
+      `<div class="ac-item${i === active ? " active" : ""}" role="option" id="${list.id}-opt-${i}" aria-selected="${i === active}" data-code="${esc(a.value)}">
+        <span class="ac-code">${esc(a.code)}</span>
+        <span class="ac-detail">${esc(a.detail)}</span>
       </div>`).join("");
     list.classList.add("show");
     input.setAttribute("aria-expanded", "true");
     if (active >= 0) input.setAttribute("aria-activedescendant", `${list.id}-opt-${active}`);
     else input.removeAttribute("aria-activedescendant");
   };
-  const pick = (code) => { input.value = code; close(); onPick && onPick(code); };
+  const pick = (code) => { input.value = code; close(); onPick && onPick(code); onSelect && onSelect(code); };
 
-  input.addEventListener("input", () => { active = -1; items = searchAirports(airports, input.value, 8, hubSet); render(); onPick && onPick(input.value); });
+  input.addEventListener("input", () => { active = -1; items = search(input.value); render(); onPick && onPick(input.value); });
   input.addEventListener("keydown", (e) => {
     if (!list.classList.contains("show")) return;
     if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, items.length - 1); render(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); render(); }
-    else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active].iata); }
+    else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active].value); }
     else if (e.key === "Escape") { close(); }
   });
   list.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus so blur doesn't close first
   list.addEventListener("click", (e) => { const it = e.target.closest(".ac-item"); if (it) pick(it.dataset.code); });
   input.addEventListener("blur", () => setTimeout(close, 120));
-  input.addEventListener("focus", () => { if (input.value) { items = searchAirports(airports, input.value, 8, hubSet); render(); } });
+  input.addEventListener("focus", () => { if (input.value) { items = search(input.value); render(); } });
 }
 setupAutocomplete($("origin"), $("origin-ac"));
 setupAutocomplete($("destination"), $("destination-ac"));
@@ -211,6 +216,46 @@ $("add-stop").addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Places to avoid
+// ---------------------------------------------------------------------------
+function renderAvoid() {
+  $("avoid-list").innerHTML = avoid.map((x, i) => `
+    <li class="chip"><span>${esc(dataReady ? avoidLabel(airportMap, airports, x) : x)}</span>
+      <button type="button" class="chip-remove" data-idx="${i}" aria-label="Stop avoiding ${esc(dataReady ? avoidLabel(airportMap, airports, x) : x)}">×</button></li>`).join("");
+  $("avoid-list").hidden = !avoid.length;
+  const full = avoid.length >= MAX_AVOID;
+  $("avoid-input").disabled = $("avoid-add").disabled = full;
+  $("avoid-input").placeholder = full ? `Up to ${MAX_AVOID} places` : "City, airport or country";
+}
+
+function addAvoid(text) {
+  const input = $("avoid-input"), v = (text ?? input.value).trim();
+  if (!v || !dataReady) return;
+  const entry = resolvePlace(airportMap, airports, countries, v, hubSet);
+  if (!entry) { $("avoid-error").textContent = `Couldn't find a city, airport or country matching “${v}”.`; return; }
+  $("avoid-error").textContent = "";
+  if (!avoid.includes(entry) && avoid.length < MAX_AVOID) avoid.push(entry);
+  input.value = "";
+  $("avoid-ac").classList.remove("show"); input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant");
+  renderAvoid();
+  input.focus();
+}
+
+setupAutocomplete($("avoid-input"), $("avoid-ac"), () => { $("avoid-error").textContent = ""; }, {
+  search: (q) => searchPlaces(countries, airports, q, 8, hubSet),
+  onSelect: (v) => addAvoid(v),
+});
+$("avoid-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { if (!e.defaultPrevented) { e.preventDefault(); addAvoid(); } }
+});
+$("avoid-add").addEventListener("click", () => addAvoid());
+$("avoid-list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".chip-remove");
+  if (!btn) return;
+  avoid.splice(+btn.dataset.idx, 1); renderAvoid(); $("avoid-input").focus();
+});
+
+// ---------------------------------------------------------------------------
 // Form state <-> UI
 // ---------------------------------------------------------------------------
 function readState() {
@@ -221,6 +266,7 @@ function readState() {
     adults: +$("adults").value, children: +$("children").value, infants: +$("infants").value,
     cabin: $("seat").value, currency: $("currency").value,
     stops: stops.map((s) => ({ ...s })),
+    avoid: [...avoid],
   };
 }
 
@@ -236,6 +282,7 @@ function applyState(s) {
   $("seat").value = s.cabin; $("currency").value = s.currency;
   stops = s.stops.map((x) => ({ ...x, date: x.date && x.date >= $("depart").value ? x.date : "" }));
   renderStops();
+  avoid = [...(s.avoid || [])]; renderAvoid();
 }
 
 const storage = {
@@ -273,6 +320,14 @@ function plan() {
   if (origin && dest && origin === dest) errors.push("Departure and arrival airports must be different.");
   if (s.infants > s.adults) errors.push("Each infant on a lap needs an adult.");
   if (s.adults + s.children + s.infants > 9) errors.push("Up to 9 travellers can be searched at once.");
+  // Drop unknown entries (e.g. from an edited shared link).
+  s.avoid = s.avoid.filter((x) => airportMap[x] || countries.some((c) => c.code === x));
+  if (s.avoid.length !== avoid.length) { avoid = [...s.avoid]; renderAvoid(); }
+  const isAvoided = avoidChecker(airportMap, s.avoid);
+  const clash = (code, what) => { if (code && isAvoided(code)) errors.push(`${airportLabel(airportMap, code)} (${what}) is on your places to avoid list. Change it or remove it from the list.`); };
+  clash(origin, "departure"); clash(dest, "arrival");
+  depA.forEach((c) => clash(c, "alternate departure")); arrA.forEach((c) => clash(c, "alternate arrival"));
+  stopCodes.forEach((c, i) => clash(c, `stop ${i + 1}`));
   const dateErr = s.depart && validateStopDates(s.depart, s.end, s.stops.map((st) => (st.mode === "fixed" ? st.date : "")), endUsed());
   if (dateErr) errors.push(dateErr);
 
@@ -290,11 +345,11 @@ function plan() {
     map: airportMap, hubs, airports, today: todayISO(),
     depAirports: [...new Set([origin, ...depA])], arrAirports: [...new Set([dest, ...arrA])],
     stops: s.stops.map((st, i) => ({ ...st, airport: stopCodes[i] })),
-    depart: s.depart, end: s.end || s.depart, roundTrip: s.trip === "round", cabin: s.cabin, pax,
+    depart: s.depart, end: s.end || s.depart, roundTrip: s.trip === "round", cabin: s.cabin, pax, avoid: s.avoid,
   });
 
   if (warnings.length) showBanner(warnings, "info"); else clearBanner();
-  renderItineraries(itineraries, opts);
+  renderItineraries(itineraries, { ...opts, avoid: s.avoid });
 
   const saved = readState();
   const query = serializeState(saved);
@@ -317,7 +372,9 @@ function renderItineraries(itineraries, opts) {
   }
   const { cabin, pax, currency } = opts;
   let html = `<div class="bar">
-    <div class="meta">${itineraries.length} itinerar${itineraries.length === 1 ? "y" : "ies"} found · cheapest first</div>
+    <div class="meta">${itineraries.length} itinerar${itineraries.length === 1 ? "y" : "ies"} found · cheapest first${
+      itineraries.some((it) => it.legs.some((l) => l.suggested)) ? " · each with different stopover cities" : ""}${
+      opts.avoid && opts.avoid.length ? `<br>Avoiding: ${esc(opts.avoid.map((x) => avoidLabel(airportMap, airports, x)).join(", "))}` : ""}</div>
     <button type="button" class="ghost-btn" data-action="share">Copy link to this search</button>
   </div>`;
 

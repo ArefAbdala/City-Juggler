@@ -89,6 +89,72 @@ export function resolveAirport(map, list, value, preferred) {
 
 export const airportLabel = (map, code) => { const a = map[code]; return a ? `${a.city} (${a.iata})` : code; };
 
+/** City-level identity of an airport: airports in the same city (LHR, LGW…) share a key. */
+export const locationKey = (map, code) => { const a = map[code]; return a ? `${a.city}|${a.country}` : code; };
+
+// ---------------------------------------------------------------------------
+// Places to avoid: entries are 3-letter airport codes (avoids that whole city)
+// or 2-letter country codes (avoids the whole country).
+// ---------------------------------------------------------------------------
+let regionNames = null;
+try { regionNames = new Intl.DisplayNames(["en"], { type: "region" }); } catch { regionNames = null; }
+export function countryName(code) {
+  try { const n = regionNames && regionNames.of(code); if (n && n !== code) return n; } catch { /* unknown code */ }
+  return code;
+}
+
+/** Countries that have at least one airport, sorted by name: [{ code, name }]. */
+export function countryList(airports) {
+  return [...new Set(airports.map((a) => a.country))].map((code) => ({ code, name: countryName(code) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export const isCountryEntry = (x) => /^[A-Z]{2}$/.test(x);
+
+/** Returns code => true if that airport is in an avoided city or country. */
+export function avoidChecker(map, avoid = []) {
+  const countries = new Set(avoid.filter(isCountryEntry));
+  const places = new Set(avoid.filter((x) => /^[A-Z]{3}$/.test(x)).map((c) => locationKey(map, c)));
+  if (!countries.size && !places.size) return () => false;
+  return (code) => { const a = map[code]; return !!a && (countries.has(a.country) || places.has(locationKey(map, code))); };
+}
+
+/** Human label for an avoid entry: "Russia (whole country)", "London (all airports)", "Orlando (MCO)". */
+export function avoidLabel(map, airports, entry) {
+  if (isCountryEntry(entry)) return `${countryName(entry)} (whole country)`;
+  const a = map[entry];
+  if (!a) return entry;
+  const sameCity = airports.filter((b) => b.city === a.city && b.country === a.country).length;
+  return sameCity > 1 ? `${a.city}, ${a.country} (all airports)` : `${a.city}, ${a.country} (${a.iata})`;
+}
+
+/** Autocomplete for the avoid box: matching countries first, then airports. Items: { value, code, detail }. */
+export function searchPlaces(countries, airports, query, limit = 8, preferred = new Set()) {
+  const q = (query || "").trim().toUpperCase();
+  if (!q) return [];
+  const cs = countries
+    .filter((c) => c.code === q || c.name.toUpperCase().startsWith(q) || (q.length >= 3 && c.name.toUpperCase().includes(q)))
+    .slice(0, 3)
+    .map((c) => ({ value: c.code, code: c.code, detail: `${c.name} — whole country` }));
+  const as = searchAirports(airports, query, limit - cs.length, preferred)
+    .map((a) => ({ value: a.iata, code: a.iata, detail: `${a.city}, ${a.country} — ${a.name}` }));
+  return [...cs, ...as];
+}
+
+const COUNTRY_ALIASES = { UK: "GB", "GREAT BRITAIN": "GB", ENGLAND: "GB", USA: "US", AMERICA: "US", UAE: "AE", "SOUTH KOREA": "KR", KOREA: "KR", RUSSIA: "RU" };
+
+/** Resolve typed text to an avoid entry (country code or airport code), or null. */
+export function resolvePlace(map, airports, countries, value, preferred) {
+  const v = (value || "").trim(), up = v.toUpperCase();
+  if (!v) return null;
+  if (COUNTRY_ALIASES[up]) return COUNTRY_ALIASES[up];
+  const byCode = countries.find((c) => c.code === up);
+  if (byCode) return byCode.code;
+  const byName = countries.find((c) => c.name.toUpperCase() === up);
+  if (byName) return byName.code;
+  return resolveAirport(map, airports, v, preferred);
+}
+
 // ---------------------------------------------------------------------------
 // Geography & hub suggestions
 // ---------------------------------------------------------------------------
@@ -133,15 +199,16 @@ function countryOk(country, pref, originCountry) {
  * Hubs between `from` and `to` matching the country/continent preference, least detour first.
  * Starts with on-route hubs and widens the allowed detour (DETOUR_STEPS) until `count` are found.
  */
-export function hubCandidates(hubs, map, from, to, { exclude = [], country = "any", continent = "any", originCountry = null, count = HUB_POOL } = {}) {
+export function hubCandidates(hubs, map, from, to, { exclude = [], skip = () => false, country = "any", continent = "any", originCountry = null, count = HUB_POOL, maxDetour = Infinity } = {}) {
   if (!map[from] || !map[to]) return [];
   const direct = dist(map, from, to);
   if (direct < 100) return [];
   const all = hubs
-    .filter((h) => map[h.code] && !exclude.includes(h.code))
+    .filter((h) => map[h.code] && !exclude.includes(h.code) && !skip(h.code))
     .map((h) => ({ ...h, country: map[h.code].country, detour: (dist(map, from, h.code) + dist(map, h.code, to)) / direct }))
     .filter((h) => countryOk(h.country, country, originCountry ?? map[from].country))
     .filter((h) => continent === "any" || COUNTRY_CONTINENT[h.country] === continent)
+    .filter((h) => h.detour <= maxDetour)
     .sort((a, b) => a.detour - b.detour);
   for (const m of DETOUR_STEPS) {
     const within = all.filter((h) => h.detour <= 1 + m);
@@ -152,17 +219,19 @@ export function hubCandidates(hubs, map, from, to, { exclude = [], country = "an
 
 /**
  * Choose one distinct hub per "suggest" slot in the segment from → to.
- * `variant` rotates through each slot's candidate list so each itinerary differs.
+ * `variant` rotates through each slot's candidate list; `skip(code)` rejects hubs
+ * (avoided places, cities already used). No two picks share a city.
  * Returns an array (same length as slots) of hubs or null, with the chosen
  * hubs re-ordered by distance from `from` so the route never doubles back.
  */
-export function pickHubsForSegment(hubs, map, from, to, slots, variant, originCountry, exclude = []) {
+export function pickHubsForSegment(hubs, map, from, to, slots, variant, originCountry, exclude = [], skip = () => false) {
   const used = new Set();
   const picked = slots.map((slot) => {
-    const cands = hubCandidates(hubs, map, from, to, { exclude, country: slot.country, continent: slot.continent || "any", originCountry });
+    const cands = hubCandidates(hubs, map, from, to, { exclude, skip, country: slot.country, continent: slot.continent || "any", originCountry, maxDetour: slot.maxDetour });
     for (let i = 0; i < cands.length; i++) {
       const h = cands[(variant + i) % cands.length];
-      if (!used.has(h.code)) { used.add(h.code); return h; }
+      const key = locationKey(map, h.code);
+      if (!used.has(key)) { used.add(key); return h; }
     }
     return null;
   });
@@ -212,37 +281,57 @@ export function formatMoney(usd, currency = "USD") {
 // Itinerary generation
 // ---------------------------------------------------------------------------
 export const MIN_RESULTS = 8, MAX_RESULTS = 12;
-const HUB_VARIANTS = 12;
 const MAX_DATE_SHIFT = 14;
 
 /**
  * @returns {{itineraries: Array, warnings: string[]}}
  * Every airport code passed in must exist in `map` (validate first).
- * Builds airport combinations × hub variants. If that gives fewer than MIN_RESULTS,
- * adds nearby departure/arrival airports (needs `airports`), then the whole trip shifted
- * a few days earlier/later (never before `today`). Each such extra has a `note`.
+ * `avoid` lists places never to use (see avoidChecker): they're skipped for suggested stops
+ * and nearby-airport extras, and itineraries starting or ending there aren't built.
+ *
+ * Suggested stops never repeat across itineraries: each itinerary takes the least-detour hubs
+ * whose city hasn't been shown yet, so every result offers new stopover cities. Airport
+ * combinations are filled round-robin until MAX_RESULTS or the hubs run out. If that gives fewer
+ * than MIN_RESULTS, nearby departure/arrival airports (needs `airports`) and then the whole trip
+ * shifted a few days earlier/later (never before `today`) are added. Each such extra has a `note`.
  */
-export function buildItineraries({ map, hubs, airports = [], depAirports, arrAirports, stops, depart, end, roundTrip, cabin, pax, today = null }) {
+export function buildItineraries({ map, hubs, airports = [], depAirports, arrAirports, stops, depart, end, roundTrip, cabin, pax, today = null, avoid = [] }) {
   const warnings = new Set();
   const hasSuggest = stops.some((s) => s.mode === "suggest");
-  const variants = hasSuggest ? HUB_VARIANTS : 1;
   const fixedCodes = stops.filter((s) => s.mode === "fixed").map((s) => s.airport);
+  const isAvoided = avoidChecker(map, avoid);
+  const usedStops = new Set(); // cities already shown as a suggested stop in an earlier itinerary
   const best = new Map();
 
-  function build(dep, arr, v, shift = 0, note = "") {
-    if (dep === arr) return null;
+  function build(dep, arr, shift = 0, note = "") {
+    if (dep === arr || isAvoided(dep) || isAvoided(arr)) return null;
     const start = addDays(depart, shift);
     if (today && start < today) return null;
     const originCountry = map[dep].country;
+    const exclude = [dep, arr, ...fixedCodes];
+    const taken = new Set(); // cities used by this itinerary's suggested stops
+    let exhausted = false;
     // Split stops into segments between fixed anchors and fill each segment's suggest slots.
     const resolved = [];
     let anchor = dep, pending = [];
     const flush = (to) => {
       if (!pending.length) return;
-      const picks = pickHubsForSegment(hubs, map, anchor, to, pending, v, originCountry, [dep, arr, ...fixedCodes]);
+      const own = (c) => isAvoided(c) || taken.has(locationKey(map, c));
+      const fresh = (c) => own(c) || usedStops.has(locationKey(map, c));
+      // Fresh (not yet shown) stop cities may detour no further than the best choices needed:
+      // fewer results beats suggesting far-off stopovers.
+      const slots = pending.map((slot) => {
+        const best = hubCandidates(hubs, map, anchor, to, { exclude, skip: own, country: slot.country, continent: slot.continent || "any", originCountry });
+        const worst = best.length ? best[best.length - 1].detour : Infinity;
+        const step = DETOUR_STEPS.findIndex((m) => worst <= 1 + m + 1e-9);
+        return { ...slot, maxDetour: step < 0 ? Infinity : 1 + DETOUR_STEPS[step] };
+      });
+      const picks = pickHubsForSegment(hubs, map, anchor, to, slots, 0, originCountry, exclude, fresh);
+      const ignoringUsed = picks.some((h) => !h) ? pickHubsForSegment(hubs, map, anchor, to, pending, 0, originCountry, exclude, own) : picks;
       picks.forEach((h, i) => {
-        if (h) resolved.push({ code: h.code, date: null, suggested: true, hub: h });
-        else warnings.add(`Couldn't find a stopover city for stop ${pending[i].index + 1} — the route may be too short or the country/continent filter too strict, so it was left out.`);
+        if (h) { taken.add(locationKey(map, h.code)); resolved.push({ code: h.code, date: null, suggested: true, hub: h }); }
+        else if (ignoringUsed[i]) exhausted = true; // only fillable with a city another itinerary already shows
+        else warnings.add(`Couldn't find a stopover city for stop ${pending[i].index + 1} — the route may be too short, or the country/continent filter or places to avoid too strict, so it was left out.`);
       });
       pending = [];
     };
@@ -251,6 +340,7 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
       else { flush(s.airport); resolved.push({ code: s.airport, date: s.date ? addDays(s.date, shift) : null, suggested: false }); anchor = s.airport; }
     });
     flush(arr);
+    if (exhausted) return null;
 
     // Drop stops that repeat the previous airport or equal the destination.
     const route = [];
@@ -273,22 +363,35 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
       });
     }
     const totalCost = legs.reduce((sum, l) => sum + (l.cost || 0), 0);
-    return { legs, codes, totalCost, note, dep, arr, variant: v, key: codes.join(">") + "|" + dates.join(",") };
+    const stopCities = route.filter((s) => s.suggested).map((s) => locationKey(map, s.code));
+    return { legs, codes, totalCost, note, dep, arr, stopCities, key: codes.join(">") + "|" + dates.join(",") };
   }
-  const add = (it) => { if (it && (!best.has(it.key) || best.get(it.key).totalCost > it.totalCost)) best.set(it.key, it); };
+  const add = (it) => {
+    if (!it || (best.has(it.key) && best.get(it.key).totalCost <= it.totalCost)) return false;
+    best.set(it.key, it);
+    it.stopCities.forEach((c) => usedStops.add(c));
+    return true;
+  };
 
-  // 1. Requested airports × hub variants
-  for (const dep of depAirports) for (const arr of arrAirports) for (let v = 0; v < variants; v++) add(build(dep, arr, v));
+  // 1. Requested airports. With suggested stops, go round-robin so every combination gets new stop cities.
+  const combos = depAirports.flatMap((dep) => arrAirports.map((arr) => [dep, arr]));
+  if (hasSuggest) {
+    for (let round = 0; round < MAX_RESULTS && best.size < MAX_RESULTS; round++) {
+      let added = false;
+      for (const [dep, arr] of combos) if (best.size < MAX_RESULTS && add(build(dep, arr))) added = true;
+      if (!added) break;
+    }
+  } else combos.forEach(([dep, arr]) => add(build(dep, arr)));
 
   const base = [...best.values()].sort((a, b) => a.totalCost - b.totalCost)[0];
-  // 2. Too few: nearby departure / arrival airports
+  // 2. Too few: nearby departure / arrival airports (never an avoided place)
   if (base && best.size < MIN_RESULTS) {
     const tried = new Set([...depAirports, ...arrAirports, ...fixedCodes]);
     for (const n of nearbyAirports(airports, map, base.dep)) {
-      if (!tried.has(n.code)) add(build(n.code, base.arr, base.variant, 0, `Nearby departure airport (${Math.round(n.dist)} km from ${base.dep})`));
+      if (!tried.has(n.code) && !isAvoided(n.code)) add(build(n.code, base.arr, 0, `Nearby departure airport (${Math.round(n.dist)} km from ${base.dep})`));
     }
     for (const n of nearbyAirports(airports, map, base.arr)) {
-      if (!tried.has(n.code)) add(build(base.dep, n.code, base.variant, 0, `Nearby arrival airport (${Math.round(n.dist)} km from ${base.arr})`));
+      if (!tried.has(n.code) && !isAvoided(n.code)) add(build(base.dep, n.code, 0, `Nearby arrival airport (${Math.round(n.dist)} km from ${base.arr})`));
     }
   }
   // 3. Still too few: flexible dates (whole trip shifted)
@@ -296,7 +399,7 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
     for (let d = 1; d <= MAX_DATE_SHIFT && best.size < MIN_RESULTS; d++) {
       for (const shift of [d, -d]) {
         if (best.size >= MIN_RESULTS) break;
-        add(build(base.dep, base.arr, base.variant, shift, `Flexible dates: ${d} day${d > 1 ? "s" : ""} ${shift < 0 ? "earlier" : "later"}`));
+        add(build(base.dep, base.arr, shift, `Flexible dates: ${d} day${d > 1 ? "s" : ""} ${shift < 0 ? "earlier" : "later"}`));
       }
     }
   }
@@ -399,8 +502,9 @@ export function airlineLinks(map, from, to, date, cabin, pax) {
 // ---------------------------------------------------------------------------
 export const DEFAULT_STATE = {
   origin: "MCO", destination: "", depAlts: [], arrAlts: [], depart: "", end: "", trip: "round",
-  adults: 1, children: 0, infants: 0, cabin: "economy", currency: "USD", stops: [],
+  adults: 1, children: 0, infants: 0, cabin: "economy", currency: "USD", stops: [], avoid: [],
 };
+export const MAX_AVOID = 10;
 
 export function serializeState(s) {
   const p = new URLSearchParams();
@@ -416,6 +520,7 @@ export function serializeState(s) {
   if (s.cabin !== "economy") p.set("cabin", s.cabin);
   if (s.currency !== "USD") p.set("cur", s.currency);
   if (s.stops.length) p.set("stops", s.stops.map((st) => st.mode === "suggest" ? `suggest:${st.country}${st.continent && st.continent !== "any" ? `:${st.continent}` : ""}` : `${st.airport}:${st.date || ""}`).join(";"));
+  if (s.avoid && s.avoid.length) p.set("avoid", s.avoid.join(","));
   return p.toString();
 }
 
@@ -443,6 +548,7 @@ export function parseState(query) {
     cabin: CABIN_MULT[p.get("cabin")] ? p.get("cabin") : "economy",
     currency: CURRENCIES[p.get("cur")] ? p.get("cur") : "USD",
     stops,
+    avoid: [...new Set((p.get("avoid") || "").split(",").filter((x) => /^[A-Za-z]{2,3}$/.test(x)).map((x) => x.toUpperCase()))].slice(0, MAX_AVOID),
   };
 }
 
