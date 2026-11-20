@@ -26,12 +26,13 @@
         <div class="ac-list" id="origin-ac"></div>
       </div>
       <button type="button" class="swap" id="swap" aria-label="Swap departure and arrival airports" title="Swap airports">⇄</button>
-      <div class="field ac-wrap">
+      <div class="field ac-wrap" id="destination-field">
         <label for="destination">To</label>
         <input id="destination" class="code" placeholder="City or code" required autocapitalize="words" spellcheck="false">
         <div class="ac-list" id="destination-ac"></div>
       </div>
     </div>
+    <label class="check-row"><input type="checkbox" id="return-home"><span>My final destination is the same as where I'm departing from</span></label>
     <div id="dep-alts" class="alt-list"></div>
     <button type="button" class="add-btn" id="add-dep-alt">+ Alternate departure airport</button>
     <div id="arr-alts" class="alt-list"></div>
@@ -39,10 +40,6 @@
 
     <!-- Dates -->
     <div class="section-label">Dates</div>
-    <div class="seg trip-type" role="radiogroup" aria-label="Trip type">
-      <label><input type="radio" name="trip" value="round" checked><span>Round trip</span></label>
-      <label><input type="radio" name="trip" value="oneway"><span>One way</span></label>
-    </div>
     <div class="grid-dates">
       <div class="field"><label for="depart">Depart</label><input id="depart" type="date" required></div>
       <div class="field" id="end-field"><label for="ret" id="end-label">Return</label><input id="ret" type="date"></div>
