@@ -10,7 +10,7 @@ import { AIRLINES, googleFlightsUrl, indexAirports, addDays, todayISO } from "..
 
 const map = indexAirports(JSON.parse(readFileSync(new URL("../airports.json", import.meta.url))));
 const date = addDays(todayISO(), 30);
-const pax = { adults: 1, children: 0, infants: 0 };
+const pax = { adults: 1 };
 
 // A route each airline plausibly serves.
 const SAMPLE = { aircanada: ["YYZ", "YVR"], british: ["LHR", "JFK"], lufthansa: ["FRA", "JFK"], airfrance: ["CDG", "JFK"], klm: ["AMS", "JFK"],
