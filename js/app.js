@@ -93,7 +93,7 @@ const airportItems = (q) => searchAirports(airports, q, 8, hubSet).map((a) => ({
 
 /** `onPick(value)` fires on typing and on picking; `onSelect(value)` only when a suggestion is picked. */
 function setupAutocomplete(input, list, onPick, { search = airportItems, onSelect = null } = {}) {
-  let active = -1, items = [];
+  let active = -1, items = [], blurTimer = 0;
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-expanded", "false");
@@ -125,8 +125,9 @@ function setupAutocomplete(input, list, onPick, { search = airportItems, onSelec
   });
   list.addEventListener("mousedown", (e) => e.preventDefault()); // keep focus so blur doesn't close first
   list.addEventListener("click", (e) => { const it = e.target.closest(".ac-item"); if (it) pick(it.dataset.code); });
-  input.addEventListener("blur", () => setTimeout(close, 120));
-  input.addEventListener("focus", () => { if (input.value) { items = search(input.value); render(); } });
+  input.addEventListener("blur", () => { clearTimeout(blurTimer); blurTimer = setTimeout(close, 120); });
+  // Cancel a pending close from a quick blur → refocus, or it would hide the list just reopened.
+  input.addEventListener("focus", () => { clearTimeout(blurTimer); if (input.value) { items = search(input.value); render(); } });
 }
 setupAutocomplete($("origin"), $("origin-ac"));
 setupAutocomplete($("destination"), $("destination-ac"));
