@@ -269,14 +269,16 @@
   // Rough day-of-week effect: midweek and Saturday departures tend to be cheaper (Sun..Sat).
   const DOW_FACTOR = [1.08, 1.0, 0.92, 0.92, 1.0, 1.1, 0.95];
 
-  // Typical cheapest one-way economy fare (USD) by great-circle distance, calibrated against
-  // fares seen on Google Flights and fare sites (Nov 2026) on routes such as LAX-SFO (~$30-60),
-  // ORD-DEN (~$60-80), LHR-BCN (~$40-60), YYZ-YVR (~$80-150), JFK-LAX (~$95-155),
-  // DXB-BKK (~$175-190), JFK-LHR (~$145-250), SIN-SYD (~$155-220), JFK-NRT (~$400-670).
+  // Typical cheapest one-way economy fare (USD) by great-circle distance, calibrated (Nov 2026)
+  // against the lowest one-way fares published on airline websites: e.g. LAX-SFO ~$64 (Southwest,
+  // Alaska), ORD-DEN ~$59-72 (Frontier), DEL-BOM ~₹5,450 (Air India Express), YYZ-YVR ~C$170
+  // (Flair), JFK-LAX ~$169-179 (JetBlue, Alaska, American), JFK-LHR ~$300-310 (Virgin, JetBlue).
   // Points are [km, USD]; values in between are interpolated linearly.
-  const FARE_CURVE = [[0, 40], [500, 50], [1500, 80], [4000, 145], [6000, 240], [11000, 520], [16000, 720]];
+  const FARE_CURVE = [[0, 60], [500, 78], [1500, 85], [3500, 160], [5000, 250], [6000, 300], [11000, 565], [16000, 780]];
   // Routes with a low-cost carrier are cheaper; routes served only by full-service airlines cost more.
   const TIER_FACTOR = [0.85, 0.95, 1.15]; // ultra-low-cost, low-cost, full-service only
+  // Low-cost fares inside Europe are much lower (Ryanair, easyJet, Vueling from ~£15).
+  const EUROPE_LOW_COST_FACTOR = 0.65;
 
   function baseFare(km) {
     for (let i = 1; i < FARE_CURVE.length; i++) {
@@ -291,9 +293,10 @@
   function estimateCost(map, from, to, cabin, pax, date) {
     if (!map[from] || !map[to]) return null;
     const cheapest = cheapestAirline(map, from, to, cabin);
-    const tier = TIER_FACTOR[cheapest ? cheapest.tier : 2];
+    const tierNum = cheapest ? cheapest.tier : 2;
+    const region = tierNum < 2 && inR(map[from], EU) && inR(map[to], EU) ? EUROPE_LOW_COST_FACTOR : 1;
     const dow = date ? DOW_FACTOR[parseISO(date).getDay()] : 1;
-    const seat = baseFare(dist(map, from, to)) * tier * (CABIN_MULT[cabin] || 1) * dow;
+    const seat = baseFare(dist(map, from, to)) * TIER_FACTOR[tierNum] * region * (CABIN_MULT[cabin] || 1) * dow;
     return Math.round(seat * pax.adults);
   }
 

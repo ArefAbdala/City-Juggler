@@ -152,9 +152,9 @@ test("airline and Google links carry passengers, cabin and currency", () => {
 });
 
 test("cost estimates sit near real one-way fares", () => {
-  // Typical cheapest economy one-way fares seen on Google Flights / fare sites (USD, Nov 2026).
-  const real = { "LAX-SFO": [25, 70], "ORD-DEN": [45, 90], "LHR-BCN": [35, 90], "YYZ-YVR": [75, 160], "JFK-LAX": [90, 170],
-    "DEL-BOM": [40, 80], "MEX-CUN": [40, 110], "DXB-BKK": [150, 220], "JFK-LHR": [140, 260], "SIN-SYD": [150, 260], "JFK-NRT": [400, 700] };
+  // Lowest one-way economy fares published on airline websites (USD, Nov 2026).
+  const real = { "LAX-SFO": [55, 130], "ORD-DEN": [55, 135], "LHR-BCN": [20, 60], "DEL-BOM": [55, 90], "MEX-CUN": [45, 80],
+    "YYZ-YVR": [120, 165], "JFK-LAX": [165, 200], "DXB-BKK": [230, 470], "JFK-LHR": [250, 400], "SIN-SYD": [180, 290], "JFK-NRT": [450, 900] };
   for (const [route, [lo, hi]] of Object.entries(real)) {
     const [o, d] = route.split("-");
     const est = L.estimateCost(map, o, d, "economy", pax1);
