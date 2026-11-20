@@ -150,7 +150,11 @@ export function resolvePlace(map, airports, countries, value, preferred) {
   if (byCode) return byCode.code;
   const byName = countries.find((c) => c.name.toUpperCase() === up);
   if (byName) return byName.code;
-  return resolveAirport(map, airports, v, preferred);
+  const airport = resolveAirport(map, airports, v, preferred);
+  if (airport) return airport;
+  // Partial country name ("Germ" → DE), matching what the autocomplete offers.
+  const q = up.length >= 3 ? countries.find((c) => c.name.toUpperCase().startsWith(up)) : null;
+  return q ? q.code : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +302,9 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
   const fixedCodes = stops.filter((s) => s.mode === "fixed").map((s) => s.airport);
   const isAvoided = avoidChecker(map, avoid);
   const usedStops = new Set(); // cities already shown as a suggested stop in an earlier itinerary
+  // Cities the traveller already flies from/to/through are never offered as a suggested stop
+  // (e.g. with alternates MCO and TPA, a Tampa trip mustn't be routed via Orlando).
+  const ownCities = new Set([...depAirports, ...arrAirports, ...fixedCodes].map((c) => locationKey(map, c)));
   const best = new Map();
 
   // returnHome: the final destination is the departure airport (dep → stops → dep).
@@ -316,7 +323,7 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
     let anchor = dep, pending = [];
     const flush = (to) => {
       if (!pending.length) return;
-      const own = (c) => isAvoided(c) || taken.has(locationKey(map, c));
+      const own = (c) => { const k = locationKey(map, c); return isAvoided(c) || taken.has(k) || ownCities.has(k) || k === locationKey(map, dep) || k === locationKey(map, arr); };
       const fresh = (c) => own(c) || usedStops.has(locationKey(map, c));
       // Fresh (not yet shown) stop cities may detour no further than the best choices needed:
       // fewer results beats suggesting far-off stopovers.
@@ -547,8 +554,9 @@ export function parseState(query) {
     depAlts: list("fromAlt"), arrAlts: returnHome ? [] : list("toAlt"),
     depart: isISODate(p.get("depart")) ? p.get("depart") : "", end: isISODate(p.get("end")) ? p.get("end") : "",
     adults,
-    cabin: CABIN_MULT[p.get("cabin")] ? p.get("cabin") : "economy",
-    currency: CURRENCIES[p.get("cur")] ? p.get("cur") : "USD",
+    // hasOwn: "constructor", "toString"… must not pass as a cabin or currency
+    cabin: Object.hasOwn(CABIN_MULT, p.get("cabin") ?? "") ? p.get("cabin") : "economy",
+    currency: Object.hasOwn(CURRENCIES, p.get("cur") ?? "") ? p.get("cur") : "USD",
     stops,
     avoid: [...new Set((p.get("avoid") || "").split(",").filter((x) => /^[A-Za-z]{2,3}$/.test(x)).map((x) => x.toUpperCase()))].slice(0, MAX_AVOID),
   };

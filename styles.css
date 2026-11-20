@@ -2,6 +2,9 @@
   --bg: #f5f6f8; --card: #fff; --ink: #14181f; --muted: #667085; --line: #e3e6eb;
   --accent: #1f5fd6; --accent-ink: #fff; --good: #137a43; --warn: #a15c00; --err: #b42318;
   --radius: 12px; --accent-light: #eef3fc;
+  /* Native controls (select popups, date pickers, calendar icons, scrollbars) follow the theme;
+     without this they stay light on the dark page and their text/icons become unreadable. */
+  color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #0f1216; --card: #171b21; --ink: #e8eaed; --muted: #98a2b3; --line: #2a2f37;
@@ -45,6 +48,7 @@ form { background: var(--card); border: 1px solid var(--line); border-radius: va
 input, select { width: 100%; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 input.code { font-weight: 600; }
+option { background-color: var(--card); color: var(--ink); }
 input:disabled, select:disabled { opacity: .55; cursor: not-allowed; }
 /* Consistent select look across browsers (iOS Safari otherwise draws glossy pills) */
 select { -webkit-appearance: none; appearance: none; padding-right: 30px; background-repeat: no-repeat; background-position: right 10px center; background-size: 12px;

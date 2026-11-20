@@ -75,7 +75,7 @@ test("two suggested stops give two distinct stops, ordered along the route", () 
 test("suggested stop that can't be filled produces a warning", () => {
   const { itineraries, warnings } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["MIA"],
     stops: [{ mode: "suggest", country: "any" }] });
-  assert.deepEqual(itineraries[0].codes, ["MCO", "MIA"]);
+  assert.deepEqual(requested(itineraries)[0].codes, ["MCO", "MIA"]);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /stop 1/);
 });
@@ -271,4 +271,28 @@ test("places to avoid: search, resolve, label and URL state", () => {
   const s = { ...L.DEFAULT_STATE, origin: "MCO", destination: "SIN", avoid: ["LHR", "RU"] };
   assert.deepEqual(L.parseState(L.serializeState(s)).avoid, ["LHR", "RU"]);
   assert.deepEqual(L.parseState("from=MCO&to=SIN&avoid=lhr,<x>,ru,lhr").avoid, ["LHR", "RU"]);
+});
+
+test("avoid box: a partial country name resolves like the autocomplete suggests", () => {
+  const countries = L.countryList(airports);
+  assert.equal(L.resolvePlace(map, airports, countries, "Germ"), "DE");
+  assert.equal(L.resolvePlace(map, airports, countries, "Paris"), "CDG"); // airports still win
+  assert.equal(L.resolvePlace(map, airports, countries, "Par"), "PY"); // same as the first suggestion
+  assert.equal(L.resolvePlace(map, airports, countries, "Zz"), null);
+});
+
+test("suggested stops never use a city the traveller already departs from, arrives at or stops in", () => {
+  const stops = [{ mode: "fixed", airport: "KEF", date: "" }, { mode: "suggest", country: "any", continent: "any" }];
+  const home = L.buildItineraries({ ...base, depAirports: ["MCO", "TPA"], stops, returnHome: true, today: "2026-12-01" });
+  const own = new Set(["MCO", "TPA", "KEF"].map((c) => L.locationKey(map, c)));
+  assert.ok(home.itineraries.length);
+  for (const it of home.itineraries) for (const l of it.legs) if (l.suggested) assert.ok(!own.has(L.locationKey(map, l.to)), it.codes.join(">"));
+  const oneWay = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [{ mode: "suggest", country: "any", continent: "europe" }], today: "2026-12-01" });
+  for (const it of oneWay.itineraries) for (const l of it.legs) if (l.suggested) assert.notEqual(L.locationKey(map, l.to), L.locationKey(map, "LHR"));
+});
+
+test("parseState ignores prototype keys as cabin or currency", () => {
+  const s = L.parseState("from=MCO&to=LHR&cur=constructor&cabin=toString");
+  assert.equal(s.currency, "USD");
+  assert.equal(s.cabin, "economy");
 });
