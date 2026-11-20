@@ -215,3 +215,62 @@ test("day-of-week factor: Wednesday cheaper than Friday", () => {
   const fri = L.estimateCost(map, "MCO", "LHR", "economy", pax1, "2026-12-11");
   assert.ok(wed < fri);
 });
+
+// --- Unique stops across itineraries & places to avoid ------------------------
+const suggestedCities = (it) => it.legs.filter((l) => l.suggested).map((l) => L.locationKey(map, l.to));
+
+test("suggested stop cities never repeat across itineraries", () => {
+  for (const stops of [[{ mode: "suggest", country: "any" }], [{ mode: "suggest", country: "any" }, { mode: "suggest", country: "any" }]]) {
+    const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO", "TPA"], arrAirports: ["SIN", "KUL"], stops, today: "2026-12-01" });
+    assert.ok(itineraries.length > 1);
+    const all = itineraries.flatMap(suggestedCities);
+    assert.equal(new Set(all).size, all.length, all.join(" "));
+  }
+});
+
+test("unique stops also hold for nearby-airport and flexible-date extras", () => {
+  const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["SIN"], today: "2026-12-01",
+    stops: [{ mode: "suggest", country: "any" }, { mode: "suggest", country: "any" }, { mode: "suggest", country: "any" }] });
+  const all = itineraries.flatMap(suggestedCities);
+  assert.equal(new Set(all).size, all.length, all.join(" "));
+  for (const it of itineraries) assert.equal(it.codes.length, 5, it.codes.join(">"));
+});
+
+test("two suggested stops in one itinerary never share a city (e.g. NRT and HND)", () => {
+  const { itineraries } = L.buildItineraries({ ...base, depAirports: ["SIN"], arrAirports: ["SEA"],
+    stops: [{ mode: "suggest", country: "any" }, { mode: "suggest", country: "any" }] });
+  for (const it of itineraries) { const c = suggestedCities(it); assert.equal(new Set(c).size, c.length, it.codes.join(">")); }
+});
+
+test("avoided cities and countries are never suggested", () => {
+  const avoid = ["LHR", "DE", "AE"]; // London (all airports), Germany, UAE
+  const isAvoided = L.avoidChecker(map, avoid);
+  assert.ok(isAvoided("LGW") && isAvoided("FRA") && isAvoided("DXB") && !isAvoided("CDG"));
+  const { itineraries } = L.buildItineraries({ ...base, depAirports: ["JFK"], arrAirports: ["SIN"], avoid, today: "2026-12-01",
+    stops: [{ mode: "suggest", country: "any" }, { mode: "suggest", country: "any" }] });
+  assert.ok(itineraries.length > 0);
+  for (const it of itineraries) for (const c of it.codes) assert.ok(!isAvoided(c), `${c} in ${it.codes.join(">")}`);
+});
+
+test("avoided places are not offered as nearby airports", () => {
+  const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [], today: "2026-12-01", avoid: ["LGW", "STN"] });
+  // avoiding LGW avoids all of London, so LHR itself is avoided: nothing is built
+  assert.equal(itineraries.length, 0);
+  const r = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [], today: "2026-12-01", avoid: ["TPA", "SFB"] });
+  for (const it of r.itineraries) assert.ok(!["TPA", "SFB"].includes(it.dep), it.note);
+});
+
+test("places to avoid: search, resolve, label and URL state", () => {
+  const countries = L.countryList(airports);
+  assert.equal(L.resolvePlace(map, airports, countries, "Germany"), "DE");
+  assert.equal(L.resolvePlace(map, airports, countries, "fr"), "FR");
+  assert.equal(L.resolvePlace(map, airports, countries, "UK"), "GB");
+  assert.equal(L.resolvePlace(map, airports, countries, "Paris"), "CDG");
+  assert.equal(L.resolvePlace(map, airports, countries, "Heathrow"), "LHR");
+  assert.equal(L.searchPlaces(countries, airports, "Japan")[0].value, "JP");
+  assert.match(L.avoidLabel(map, airports, "LHR"), /London.*all airports/);
+  assert.match(L.avoidLabel(map, airports, "RU"), /Russia \(whole country\)/);
+  const s = { ...L.DEFAULT_STATE, origin: "MCO", destination: "SIN", avoid: ["LHR", "RU"] };
+  assert.deepEqual(L.parseState(L.serializeState(s)).avoid, ["LHR", "RU"]);
+  assert.deepEqual(L.parseState("from=MCO&to=SIN&avoid=lhr,<x>,ru,lhr").avoid, ["LHR", "RU"]);
+});
