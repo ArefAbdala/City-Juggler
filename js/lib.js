@@ -315,9 +315,10 @@
     const ownCities = new Set([...depAirports, ...arrAirports, ...fixedCodes].map((c) => locationKey(map, c)));
     const best = new Map();
 
-    // returnHome: the final destination is the departure airport (dep → stops → dep).
+    // returnHome: the final destination is the departure airport (dep → stops → dep), or one of
+    // the alternate arrival airports when the traveller would also accept flying home to those.
     function build(dep, arr, shift = 0, note = "") {
-      if (returnHome) arr = dep;
+      if (returnHome) arr = arr || dep;
       else if (dep === arr) return null;
       if (isAvoided(dep) || isAvoided(arr)) return null;
       const start = addDays(depart, shift);
@@ -390,7 +391,7 @@
     };
 
     // 1. Requested airports. With suggested stops, go round-robin so every combination gets new stop cities.
-    const combos = depAirports.flatMap((dep) => (returnHome ? [dep] : arrAirports).map((arr) => [dep, arr]));
+    const combos = depAirports.flatMap((dep) => (returnHome ? [...new Set([dep, ...arrAirports])] : arrAirports).map((arr) => [dep, arr]));
     if (hasSuggest) {
       for (let round = 0; round < MAX_RESULTS && best.size < MAX_RESULTS; round++) {
         let added = false;
@@ -404,7 +405,9 @@
     if (base && best.size < MIN_RESULTS) {
       const tried = new Set([...depAirports, ...arrAirports, ...fixedCodes]);
       for (const n of nearbyAirports(airports, map, base.dep)) {
-        if (!tried.has(n.code) && !isAvoided(n.code)) add(build(n.code, base.arr, 0, `Nearby departure airport (${Math.round(n.dist)} km from ${base.dep})`));
+        // Returning home: a nearby departure airport is also the one flown back to.
+        const arr = returnHome && base.arr === base.dep ? n.code : base.arr;
+        if (!tried.has(n.code) && !isAvoided(n.code)) add(build(n.code, arr, 0, `Nearby departure airport (${Math.round(n.dist)} km from ${base.dep})`));
       }
       if (!returnHome) for (const n of nearbyAirports(airports, map, base.arr)) {
         if (!tried.has(n.code) && !isAvoided(n.code)) add(build(base.dep, n.code, 0, `Nearby arrival airport (${Math.round(n.dist)} km from ${base.arr})`));
@@ -523,7 +526,7 @@
     p.set("from", s.origin);
     if (s.returnHome) p.set("home", "1"); else p.set("to", s.destination);
     if (s.depAlts.length) p.set("fromAlt", s.depAlts.join(","));
-    if (!s.returnHome && s.arrAlts.length) p.set("toAlt", s.arrAlts.join(","));
+    if (s.arrAlts.length) p.set("toAlt", s.arrAlts.join(","));
     if (s.depart) p.set("depart", s.depart);
     if (s.end) p.set("end", s.end);
     p.set("adults", s.adults);
@@ -559,7 +562,7 @@
     return {
       ...DEFAULT_STATE,
       origin: (p.get("from") || "").slice(0, 60), destination, returnHome,
-      depAlts: list("fromAlt"), arrAlts: returnHome ? [] : list("toAlt"),
+      depAlts: list("fromAlt"), arrAlts: list("toAlt"),
       depart: isISODate(p.get("depart")) ? p.get("depart") : "", end: isISODate(p.get("end")) ? p.get("end") : "",
       adults,
       // hasOwn: "constructor", "toString"… must not pass as a cabin or currency

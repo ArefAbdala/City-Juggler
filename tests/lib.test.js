@@ -103,6 +103,12 @@ test("returning home pairs each alternate departure airport with itself", () => 
   assert.deepEqual(L.buildItineraries({ ...base, returnHome: true, depAirports: ["MCO"], stops: [] }).itineraries, []);
 });
 
+test("returning home can also fly back to an alternate arrival airport", () => {
+  const its = requested(L.buildItineraries({ ...base, returnHome: true, depAirports: ["MCO"], arrAirports: ["TPA"], stops: [homeStop] }).itineraries);
+  assert.deepEqual(its.map((i) => i.codes[0] + i.codes.at(-1)).sort(), ["MCOMCO", "MCOTPA"]);
+  for (const it of its) assert.ok(it.legs.at(-1).isReturn);
+});
+
 test("fixed stop with date flies out on that date", () => {
   const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LHR"],
     stops: [{ mode: "fixed", airport: "JFK", date: "2026-12-13" }] });
@@ -155,7 +161,7 @@ test("state round-trips through the URL and rejects junk", () => {
   assert.equal(junk.adults, 1); assert.equal(junk.cabin, "economy"); assert.equal(junk.currency, "USD"); assert.equal(junk.depart, "");
   assert.deepEqual(junk.stops.map((x) => [x.mode, x.airport, x.country, x.continent]), [["fixed", "", "any", "any"], ["suggest", "", "any", "any"]]);
   assert.equal(L.parseState(""), null);
-  const home = { ...s, destination: "", arrAlts: [], returnHome: true };
+  const home = { ...s, destination: "", arrAlts: ["TPA"], returnHome: true };
   assert.deepEqual(L.parseState(L.serializeState(home)), home);
 });
 
