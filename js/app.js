@@ -58,6 +58,9 @@ function updateReturnHome() {
   const home = returnHome();
   $("destination-field").hidden = $("swap").hidden = home;
   $("arr-alts").hidden = home;
+  // Disable too, so the arrival airport can't be typed into or submitted while hidden
+  $("destination").disabled = home;
+  document.querySelectorAll("#arr-alts input, #arr-alts button").forEach((el) => { el.disabled = home; });
   $("add-arr-alt").hidden = home || arrAlts.length >= MAX_ALTS;
   updateDateFields();
 }
@@ -152,6 +155,7 @@ function renderAlts(prefix) {
     $(`add-${prefix}-alt`).focus();
   }));
   $(`add-${prefix}-alt`).hidden = arr.length >= MAX_ALTS || (prefix === "arr" && returnHome());
+  if (prefix === "arr") updateReturnHome();
 }
 $("add-dep-alt").addEventListener("click", () => { depAlts.push(""); renderAlts("dep"); $(`dep-alt-${depAlts.length - 1}`).focus(); });
 $("add-arr-alt").addEventListener("click", () => { arrAlts.push(""); renderAlts("arr"); $(`arr-alt-${arrAlts.length - 1}`).focus(); });
@@ -467,5 +471,9 @@ $("f").addEventListener("submit", (e) => { e.preventDefault(); plan(); });
 // ---------------------------------------------------------------------------
 const fromUrl = parseState(location.search);
 const restored = fromUrl || parseState(storage.get() || "");
-if (restored) applyState(restored); else updateDateFields();
+if (restored) applyState(restored); else updateReturnHome();
+// Mobile browsers restore form controls (reload, tab restore, back/forward cache)
+// without firing "change", so re-sync the arrival fields with the checkbox.
+window.addEventListener("pageshow", updateReturnHome);
+window.addEventListener("load", updateReturnHome);
 if (fromUrl) dataLoaded.then(() => { if (dataReady) plan(); });
