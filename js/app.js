@@ -61,14 +61,15 @@ function updateDateFields() {
 function updateReturnHome() {
   const home = returnHome();
   $("destination-field").hidden = $("swap").hidden = home;
-  $("arr-alts").hidden = home;
   // Disable too, so the arrival airport can't be typed into or submitted while hidden
   $("destination").disabled = home;
-  document.querySelectorAll("#arr-alts input, #arr-alts button").forEach((el) => { el.disabled = home; });
-  $("add-arr-alt").hidden = home || arrAlts.length >= MAX_ALTS;
+  // Alternate arrival airports stay available: when returning home they're other airports
+  // you'd accept flying back to.
+  $("add-arr-alt").textContent = home ? "+ Alternate return airport" : "+ Alternate arrival airport";
+  $("add-arr-alt").hidden = arrAlts.length >= MAX_ALTS;
   updateDateFields();
 }
-$("return-home").addEventListener("change", updateReturnHome);
+$("return-home").addEventListener("change", () => { renderAlts("arr"); });
 
 $("swap").addEventListener("click", () => {
   const o = $("origin").value; $("origin").value = $("destination").value; $("destination").value = o;
@@ -141,7 +142,7 @@ setupAutocomplete($("destination"), $("destination-ac"));
 // ---------------------------------------------------------------------------
 function renderAlts(prefix) {
   const container = $(`${prefix}-alts`), arr = prefix === "dep" ? depAlts : arrAlts;
-  const kind = prefix === "dep" ? "departure" : "arrival";
+  const kind = prefix === "dep" ? "departure" : returnHome() ? "return" : "arrival";
   container.innerHTML = arr.map((code, i) => `
     <div class="alt-row">
       <div class="field ac-wrap">
@@ -159,7 +160,7 @@ function renderAlts(prefix) {
     arr.splice(+btn.dataset.idx, 1); renderAlts(prefix);
     $(`add-${prefix}-alt`).focus();
   }));
-  $(`add-${prefix}-alt`).hidden = arr.length >= MAX_ALTS || (prefix === "arr" && returnHome());
+  $(`add-${prefix}-alt`).hidden = arr.length >= MAX_ALTS;
   if (prefix === "arr") updateReturnHome();
 }
 $("add-dep-alt").addEventListener("click", () => { depAlts.push(""); renderAlts("dep"); $(`dep-alt-${depAlts.length - 1}`).focus(); });
@@ -319,7 +320,7 @@ function plan() {
   const origin = need(s.origin, "a departure airport");
   const dest = s.returnHome ? null : need(s.destination, "an arrival airport");
   const depA = s.depAlts.map((v) => need(v, "an alternate departure airport"));
-  const arrA = s.returnHome ? [] : s.arrAlts.map((v) => need(v, "an alternate arrival airport"));
+  const arrA = s.arrAlts.map((v) => need(v, "an alternate arrival airport"));
   const stopCodes = s.stops.map((st, i) => (st.mode === "fixed" ? need(st.airport, `stop ${i + 1}'s airport`) : null));
 
   if (!s.depart) errors.push("Please choose a departure date.");
@@ -353,7 +354,7 @@ function plan() {
   const opts = { cabin: s.cabin, pax, currency: s.currency };
   const { itineraries, warnings } = buildItineraries({
     map: airportMap, hubs, airports, today: todayISO(),
-    depAirports: [...new Set([origin, ...depA])], arrAirports: s.returnHome ? [] : [...new Set([dest, ...arrA])],
+    depAirports: [...new Set([origin, ...depA])], arrAirports: s.returnHome ? [...new Set(arrA)] : [...new Set([dest, ...arrA])],
     stops: s.stops.map((st, i) => ({ ...st, airport: stopCodes[i] })),
     depart: s.depart, end: s.end || s.depart, returnHome: s.returnHome, cabin: s.cabin, pax, avoid: s.avoid,
   });
