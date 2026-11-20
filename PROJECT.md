@@ -17,6 +17,7 @@ A fully static trip planning tool. Build multi-stop itineraries, get stopover re
 - **Search by city, airport name or code**: "London", "Heathrow" and "LHR" all work; ties go to major hubs
 - **Alternate airports**: 1–3 alternates for departure and arrival — every viable combination is compared. Always available: when your final destination is where you started, arrival alternates are other airports you would accept flying home to
 - **Multiple itinerary suggestions**: Always at least 8 (up to 12) variants, sorted by estimated cost. Built from alternate airports and hub choices; if that gives fewer than 8, nearby departure/arrival airports and flexible dates (whole trip a few days earlier/later, never in the past) are added and labelled
+- **Collapsible flight details**: each itinerary's legs sit in an expandable "Flight details" section (the cheapest starts open; "Expand all" / "Collapse all" toggles every card). Each leg shows the estimated flying time and distance, and the full airport names with their city and country
 - **Travellers & currency**: Number of travellers; cabin class; prices shown in USD, EUR, GBP, CAD, AUD, MXN, JPY, INR or AED (approximate fixed rates)
 - **Booking links**: Each flight links to Google Flights (with passengers, cabin and currency) plus the airlines likely to fly that route, most relevant first. Links pass passenger counts and cabin where the airline's URL supports it
 - **Share & save**: The search is kept in the URL — copy the link to share or bookmark it; opening it re-runs the search. Your last search is remembered in the browser
@@ -92,6 +93,7 @@ This is a static site. Deploy to any static host:
 
 ## Notes
 
+- **Flight times are estimates**: ~30 min for taxi/climb/descent plus cruise at ~800 km/h over the great-circle distance (+10% for routing), rounded to 5 minutes. Real times vary with winds and routing.
 - **Cost estimates are approximate**: distance × cabin multiplier × travellers with a small day-of-week adjustment (midweek/Saturday slightly cheaper), converted with fixed exchange rates. Open the booking links for real prices.
 - **Each leg is booked separately**: the itinerary is a plan for self-transfer trips.
 - **Airline deep links are best-effort**: they can break when airlines redesign their sites — see `npm run check-links`.
