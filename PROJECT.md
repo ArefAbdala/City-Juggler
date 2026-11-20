@@ -11,6 +11,8 @@ A fully static trip planning tool. Build multi-stop itineraries, get stopover re
 - **Round trip or one way**: Round trips add a flight home on the return date; one-way trips fly the last leg on the "Arrive by" date
 - **Multi-stop trips**: Up to 4 city stops between departure and arrival, each either an airport you choose (with an optional "leave on" date) or "Suggest for me"
 - **Stop suggestions**: Recommends hub cities (from 110 hubs) with the least detour between the neighbouring points of your route. On-route hubs (≤30% detour) are preferred; the allowed detour widens (60%, 100%, 200%) only when needed to find enough matches. Several suggested stops get distinct cities, ordered so the route never doubles back. If none fits (e.g. very short trips), you're told why
+- **No repeated stopovers across itineraries**: every itinerary in a search gets its own suggested stop cities — a city shown as a stop in one result (counting all its airports, e.g. NRT/HND) never appears as a suggested stop in another. Fresh stops never widen the detour beyond what the best choices needed, so long multi-stop trips may show fewer results rather than far-off stopovers
+- **Places to avoid**: add up to 10 cities, airports or whole countries (autocomplete, or type e.g. "Paris", "LHR", "Germany", "UK"). Choosing an airport avoids its whole city. Avoided places are never suggested as stops, nearby airports or flexible-date alternatives, and you're warned if your own route uses one. Saved in the shareable link. Connections inside a single flight are chosen by the airline, so check them when booking
 - **Country & continent preference** for suggested stops: same/different/any country, and a preferred continent (North America & Caribbean, South America, Europe, Asia & Middle East, Africa, Oceania). Not shown for "I know where" stops
 - **Search by city, airport name or code**: "London", "Heathrow" and "LHR" all work; ties go to major hubs
 - **Alternate airports**: 1–3 alternates for departure and arrival — every viable combination is compared
@@ -29,8 +31,8 @@ Everything runs in the browser:
 
 1. The user fills in the form; airport text is resolved to IATA codes using `airports.json`
 2. Input is validated (unknown airports, dates in the past or out of order, traveller limits)
-3. For "Suggest for me" stops, hubs from `hub_cities.json` are filtered by country/continent preference and ranked by detour from the surrounding waypoints
-4. Variants are built from alternate airport combinations × hub choices (topped up with nearby airports / flexible dates to reach 8); flight dates are scheduled from fixed stop dates and spread evenly in between
+3. For "Suggest for me" stops, hubs from `hub_cities.json` are filtered by country/continent preference and the avoid list, and ranked by detour from the surrounding waypoints
+4. Variants are built from alternate airport combinations, each taking the best hubs whose city hasn't been used by an earlier itinerary (topped up with nearby airports / flexible dates to reach 8); flight dates are scheduled from fixed stop dates and spread evenly in between
 5. Each leg gets a distance-based cost estimate and booking links
 
 No backend, no API keys, no scraping.
