@@ -1,9 +1,13 @@
-import {
+// UI. A plain script (not an ES module) so the page works when opened from disk (file://).
+// Loaded with `defer` after js/airports.js, js/hubs.js and js/lib.js.
+(function () {
+"use strict";
+const {
   todayISO, addDays, validateStopDates, indexAirports, searchAirports, resolveAirport, airportLabel,
   buildItineraries, googleFlightsUrl, airlineLinks, formatMoney, formatDate, CURRENCIES, CONTINENTS,
   serializeState, parseState, itineraryToText, itineraryToICS,
   countryList, searchPlaces, resolvePlace, avoidChecker, avoidLabel, MAX_AVOID,
-} from "./lib.js";
+} = globalThis.PlanMyTrip;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -73,10 +77,10 @@ $("swap").addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // Data
 // ---------------------------------------------------------------------------
-const dataLoaded = Promise.all([
-  fetch("airports.json").then((r) => { if (!r.ok) throw new Error(`airports.json: HTTP ${r.status}`); return r.json(); }),
-  fetch("hub_cities.json").then((r) => { if (!r.ok) throw new Error(`hub_cities.json: HTTP ${r.status}`); return r.json(); }),
-]).then(([ap, hb]) => {
+// Loaded by js/airports.js and js/hubs.js (scripts, not fetched JSON, so file:// works too).
+const dataLoaded = Promise.resolve().then(() => {
+  const { airports: ap, hubs: hb } = globalThis.PlanMyTripData || {};
+  if (!Array.isArray(ap) || !Array.isArray(hb)) throw new Error("airport data scripts didn't load");
   airports = ap; airportMap = indexAirports(ap); hubs = hb; hubSet = new Set(hb.map((h) => h.code));
   countries = countryList(ap); dataReady = true; renderAvoid();
   $("go").disabled = false; $("go").textContent = "Plan Trip";
@@ -478,3 +482,4 @@ if (restored) applyState(restored); else updateReturnHome();
 window.addEventListener("pageshow", updateReturnHome);
 window.addEventListener("load", updateReturnHome);
 if (fromUrl) dataLoaded.then(() => { if (dataReady) plan(); });
+})();

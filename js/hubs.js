@@ -1,3 +1,6 @@
+// Major hub airports used for stop suggestions.
+// A script rather than JSON so it loads when index.html is opened from disk (file://).
+(globalThis.PlanMyTripData ||= {}).hubs =
 [
 {"code":"ATL","name":"Atlanta","region":"us-southeast"},
 {"code":"ORD","name":"Chicago","region":"us-midwest"},
@@ -109,4 +112,4 @@
 {"code":"SJU","name":"San Juan","region":"caribbean"},
 {"code":"LAS","name":"Las Vegas","region":"us-west"},
 {"code":"MCO","name":"Orlando","region":"us-southeast"}
-]
+];

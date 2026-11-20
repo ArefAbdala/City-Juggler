@@ -1,3 +1,6 @@
+// Airports (IATA code, name, city, country, lat/lon).
+// A script rather than JSON so it loads when index.html is opened from disk (file://).
+(globalThis.PlanMyTripData ||= {}).airports =
 [
 {"iata":"AAL","name":"Aalborg Airport","city":"Aalborg","country":"DK","lat":57.0926,"lon":9.8492},
 {"iata":"AAR","name":"Aarhus Airport","city":"Aarhus","country":"DK","lat":56.3000,"lon":10.6190},
@@ -523,4 +526,4 @@
 {"iata":"ZIH","name":"Ixtapa-Zihuatanejo International Airport","city":"Zihuatanejo","country":"MX","lat":17.6016,"lon":-101.4606},
 {"iata":"ZNZ","name":"Abeid Amani Karume International Airport","city":"Zanzibar","country":"TZ","lat":-6.2220,"lon":39.2249},
 {"iata":"ZRH","name":"Zurich Airport","city":"Zurich","country":"CH","lat":47.4647,"lon":8.5492}
-]
+];

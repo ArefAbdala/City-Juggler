@@ -29,9 +29,9 @@ A fully static trip planning tool. Build multi-stop itineraries, get stopover re
 
 Everything runs in the browser:
 
-1. The user fills in the form; airport text is resolved to IATA codes using `airports.json`
+1. The user fills in the form; airport text is resolved to IATA codes using `js/airports.js`
 2. Input is validated (unknown airports, dates in the past or out of order, traveller limits)
-3. For "Suggest for me" stops, hubs from `hub_cities.json` are filtered by country/continent preference and the avoid list, and ranked by detour from the surrounding waypoints
+3. For "Suggest for me" stops, hubs from `js/hubs.js` are filtered by country/continent preference and the avoid list, and ranked by detour from the surrounding waypoints
 4. Variants are built from alternate airport combinations, each taking the best hubs whose city hasn't been used by an earlier itinerary (topped up with nearby airports / flexible dates to reach 8); flight dates are scheduled from fixed stop dates and spread evenly in between
 5. Each leg gets a distance-based cost estimate and booking links
 
@@ -39,11 +39,13 @@ No backend, no API keys, no scraping.
 
 ## Development
 
-No build step. Serve the folder with any static server (ES modules and `fetch` need http, not `file://`):
+No build step. Open `index.html` directly in a browser, or serve the folder with any static server:
 
 ```sh
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
+
+Opening the file directly (`file://`) works because everything loads as plain `<script defer>` tags: browsers block ES modules and `fetch()` on `file://` pages. So keep it that way — don't switch to `import`/`export` or fetch JSON. `js/lib.js` publishes its functions as `globalThis.PlanMyTrip`, and the data scripts publish `globalThis.PlanMyTripData` (`airports`, `hubs`).
 
 Tests use Node's built-in test runner (Node 18+), no dependencies:
 
@@ -80,10 +82,10 @@ This is a static site. Deploy to any static host:
 |---|---|
 | `index.html` | Page markup |
 | `styles.css` | All styles, including the mobile layout |
-| `js/lib.js` | Pure logic (no DOM): airport search, scheduling, hub suggestions, cost estimates, booking links, URL state, text/ICS export |
+| `js/lib.js` | Pure logic (no DOM), exposed as `globalThis.PlanMyTrip`: airport search, scheduling, hub suggestions, cost estimates, booking links, URL state, text/ICS export |
 | `js/app.js` | UI: form, autocomplete, rendering, sharing, local storage |
-| `airports.json` | 524 airports with IATA codes, names, cities, countries, lat/lon |
-| `hub_cities.json` | 110 major hub airports with region tags, used for stop suggestions |
+| `js/airports.js` | 524 airports with IATA codes, names, cities, countries, lat/lon |
+| `js/hubs.js` | 110 major hub airports with region tags, used for stop suggestions |
 | `tests/lib.test.js` | Unit tests (`npm test`) |
 | `scripts/check-links.js` | Airline deep-link checker (`npm run check-links`) |
 | `screenshot.png` | UI screenshot |

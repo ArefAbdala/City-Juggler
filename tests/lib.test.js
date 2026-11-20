@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import * as L from "../js/lib.js";
+import "../js/airports.js";
+import "../js/hubs.js";
+import "../js/lib.js";
 
-const airports = JSON.parse(readFileSync(new URL("../airports.json", import.meta.url)));
-const hubs = JSON.parse(readFileSync(new URL("../hub_cities.json", import.meta.url)));
+// The browser scripts publish globals (they're plain scripts so file:// works).
+const L = globalThis.PlanMyTrip;
+const { airports, hubs } = globalThis.PlanMyTripData;
 const map = L.indexAirports(airports);
 const pax1 = { adults: 1 };
 const requested = (its) => its.filter((i) => !i.note); // exclude nearby-airport / flexible-date extras

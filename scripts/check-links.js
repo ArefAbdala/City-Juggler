@@ -5,10 +5,11 @@
 // automated requests (403/429) or render search results with JavaScript, so a
 // "blocked" result isn't proof of a broken link and a 200 isn't proof the
 // search pre-fills correctly. Open any suspicious link in a browser to confirm.
-import { readFileSync } from "node:fs";
-import { AIRLINES, googleFlightsUrl, indexAirports, addDays, todayISO } from "../js/lib.js";
+import "../js/airports.js";
+import "../js/lib.js";
 
-const map = indexAirports(JSON.parse(readFileSync(new URL("../airports.json", import.meta.url))));
+const { AIRLINES, googleFlightsUrl, indexAirports, addDays, todayISO } = globalThis.PlanMyTrip;
+const map = indexAirports(globalThis.PlanMyTripData.airports);
 const date = addDays(todayISO(), 30);
 const pax = { adults: 1 };
 
