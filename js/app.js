@@ -4,7 +4,7 @@
 "use strict";
 const {
   todayISO, addDays, validateStopDates, indexAirports, searchAirports, resolveAirport, airportLabel,
-  buildItineraries, googleFlightsUrl, airlineLinks, formatMoney, formatDate, CURRENCIES, CONTINENTS,
+  buildItineraries, googleFlightsUrl, airlineLinks, cheapestAirlineLink, formatMoney, formatDate, CURRENCIES, CONTINENTS,
   serializeState, parseState, itineraryToText, itineraryToICS,
   estimateFlightMinutes, formatDuration, countryName, dist,
   countryList, searchPlaces, resolvePlace, avoidChecker, avoidLabel, MAX_AVOID,
@@ -431,7 +431,8 @@ function renderItineraries(itineraries, opts) {
     itin.legs.forEach((leg, i) => {
       const tag = leg.isReturn ? ` <span class="suggested-tag">— Return home</span>`
         : leg.suggested && leg.hub ? ` <span class="suggested-tag">— Recommended stop: <strong>${esc(leg.hub.name)} (${esc(leg.hub.code)})</strong></span>` : "";
-      const links = airlineLinks(airportMap, leg.from, leg.to, leg.date, cabin, pax);
+      const cheap = cheapestAirlineLink(airportMap, leg.from, leg.to, leg.date, cabin, pax);
+      const links = airlineLinks(airportMap, leg.from, leg.to, leg.date, cabin, pax).filter((l) => !cheap || l.key !== cheap.key);
       const link = (l) => `<a class="book-link" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)} ${extIcon}</a>`;
       const top = links.slice(0, TOP_AIRLINES), more = links.slice(TOP_AIRLINES);
       html += `<div class="itin-leg">
@@ -446,6 +447,7 @@ function renderItineraries(itineraries, opts) {
         <div class="itin-leg-cost">~${esc(formatMoney(leg.cost || 0, currency))} estimated</div>
         <div class="book-links">
           <a class="book-link gf" href="${esc(googleFlightsUrl(leg.from, leg.to, leg.date, cabin, pax, currency))}" target="_blank" rel="noopener noreferrer">Google Flights ${extIcon}</a>
+          ${cheap ? `<a class="book-link cheap" href="${esc(cheap.url)}" target="_blank" rel="noopener noreferrer" title="The airline usually cheapest on this route. Google Flights shows the live lowest fare.">Likely cheapest: ${esc(cheap.name)} ${extIcon}</a>` : ""}
           ${top.map(link).join("")}
         </div>
         ${more.length ? `<details class="more-airlines"><summary>More airlines (${more.length})</summary><div class="book-links">${more.map(link).join("")}</div></details>` : ""}

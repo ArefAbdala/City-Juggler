@@ -15,7 +15,10 @@ const pax = { adults: 1 };
 
 // A route each airline plausibly serves.
 const SAMPLE = { aircanada: ["YYZ", "YVR"], british: ["LHR", "JFK"], lufthansa: ["FRA", "JFK"], airfrance: ["CDG", "JFK"], klm: ["AMS", "JFK"],
-  turkish: ["IST", "JFK"], emirates: ["DXB", "JFK"], qatar: ["DOH", "JFK"], singapore: ["SIN", "LHR"], cathay: ["HKG", "LHR"] };
+  turkish: ["IST", "JFK"], emirates: ["DXB", "JFK"], qatar: ["DOH", "JFK"], singapore: ["SIN", "LHR"], cathay: ["HKG", "LHR"],
+  ryanair: ["STN", "DUB"], easyjet: ["LGW", "BCN"], wizz: ["LTN", "BUD"], vueling: ["BCN", "LGW"], pegasus: ["SAW", "BER"],
+  flydubai: ["DXB", "BKK"], westjet: ["YYZ", "YVR"], flair: ["YYZ", "YVR"], volaris: ["MEX", "CUN"], indigo: ["DEL", "BOM"],
+  airasia: ["KUL", "BKK"], scoot: ["SIN", "SYD"], jetstar: ["SYD", "MEL"] };
 
 const targets = [
   { name: "Google Flights", url: googleFlightsUrl("JFK", "LAX", date, "economy", pax) },

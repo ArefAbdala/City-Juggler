@@ -269,13 +269,31 @@
   // Rough day-of-week effect: midweek and Saturday departures tend to be cheaper (Sun..Sat).
   const DOW_FACTOR = [1.08, 1.0, 0.92, 0.92, 1.0, 1.1, 0.95];
 
+  // Typical cheapest one-way economy fare (USD) by great-circle distance, calibrated against
+  // fares seen on Google Flights and fare sites (Nov 2026) on routes such as LAX-SFO (~$30-60),
+  // ORD-DEN (~$60-80), LHR-BCN (~$40-60), YYZ-YVR (~$80-150), JFK-LAX (~$95-155),
+  // DXB-BKK (~$175-190), JFK-LHR (~$145-250), SIN-SYD (~$155-220), JFK-NRT (~$400-670).
+  // Points are [km, USD]; values in between are interpolated linearly.
+  const FARE_CURVE = [[0, 40], [500, 50], [1500, 80], [4000, 145], [6000, 240], [11000, 520], [16000, 720]];
+  // Routes with a low-cost carrier are cheaper; routes served only by full-service airlines cost more.
+  const TIER_FACTOR = [0.85, 0.95, 1.15]; // ultra-low-cost, low-cost, full-service only
+
+  function baseFare(km) {
+    for (let i = 1; i < FARE_CURVE.length; i++) {
+      const [k0, f0] = FARE_CURVE[i - 1], [k1, f1] = FARE_CURVE[i];
+      if (km <= k1) return f0 + (f1 - f0) * (km - k0) / (k1 - k0);
+    }
+    const [k0, f0] = FARE_CURVE[FARE_CURVE.length - 2], [k1, f1] = FARE_CURVE[FARE_CURVE.length - 1];
+    return f1 + (f1 - f0) * (km - k1) / (k1 - k0);
+  }
+
   /** Rough fare in USD for all passengers; `date` (optional) applies the day-of-week factor. */
   function estimateCost(map, from, to, cabin, pax, date) {
     if (!map[from] || !map[to]) return null;
-    const d = dist(map, from, to);
-    const rate = d < 500 ? 0.25 : d < 1500 ? 0.15 : d < 4000 ? 0.1 : d < 8000 ? 0.08 : 0.07;
+    const cheapest = cheapestAirline(map, from, to, cabin);
+    const tier = TIER_FACTOR[cheapest ? cheapest.tier : 2];
     const dow = date ? DOW_FACTOR[parseISO(date).getDay()] : 1;
-    const seat = Math.max(45, d * rate) * (CABIN_MULT[cabin] || 1) * dow;
+    const seat = baseFare(dist(map, from, to)) * tier * (CABIN_MULT[cabin] || 1) * dow;
     return Math.round(seat * pax.adults);
   }
 
@@ -469,47 +487,85 @@
   const either = (o, d, f) => f(o) || f(d);
   const both = (o, d, f) => f(o) && f(d);
 
+  // Big hubs the European low-cost carriers don't use.
+  const EU_MAJORS = ["LHR", "LGW", "LCY", "CDG", "ORY", "AMS", "FRA", "MUC", "ZRH", "GVA", "HEL"];
+
   const ymd = (date) => date.split("-");
   const mdy = (date) => { const [y, m, d] = ymd(date); return `${m}%2F${d}%2F${y}`; };
 
   // Each airline: where it plausibly flies (`serves`) and how to build a search link.
   // Deep links are best-effort and may need updating when airlines change their sites.
   const AIRLINES = [
-    { key: "delta", name: "Delta", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
+    { key: "delta", tier: 2, name: "Delta", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => `https://www.delta.com/flight-search/search?action=findFlights&tripType=ONE_WAY&originCity=${o}&destinationCity=${d}&departureDate=${mdy(date)}&paxCount=${p.adults}&searchByCabin=true` },
-    { key: "american", name: "American", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
+    { key: "american", tier: 2, name: "American", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => { const slices = JSON.stringify([{ orig: o, origNearby: false, dest: d, destNearby: false, date }]); return `https://www.aa.com/booking/search?locale=en_US&pax=${p.adults}&adult=${p.adults}&type=OneWay&searchType=Revenue&cabin=&carriers=ALL&slices=${encodeURIComponent(slices)}`; } },
-    { key: "united", name: "United", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
+    { key: "united", tier: 2, name: "United", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => `https://www.united.com/en/us/fsr/choose-flights?f=${o}&t=${d}&d=${date}&tt=1&sc=7&px=${p.adults}` },
-    { key: "jetblue", name: "JetBlue", home: "NA",
-      serves: (o, d) => both(o, d, (a) => inR(a, NA)) || (either(o, d, (a) => inR(a, ["US"])) && either(o, d, (a) => inR(a, ["GB", "FR", "IE", "NL"]))),
+    { key: "jetblue", tier: 1, name: "JetBlue", home: "NA",
+      serves: (o, d) => either(o, d, (a) => inR(a, ["US"])) && (both(o, d, (a) => inR(a, NA)) || either(o, d, (a) => inR(a, ["GB", "FR", "IE", "NL"]))),
       url: (o, d, date, p) => `https://www.jetblue.com/booking/flights?from=${o}&to=${d}&depart=${date}&isMultiCity=false&noOfRoute=1&lang=en&adults=${p.adults}&sharedMarket=false&roundTripFares=false` },
-    { key: "southwest", name: "Southwest", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
+    { key: "southwest", tier: 1, name: "Southwest", home: "NA", skip: ["JFK", "EWR", "IAH"], serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => `https://www.southwest.com/air/booking/select.html?originationAirportCode=${o}&destinationAirportCode=${d}&departureDate=${date}&tripType=oneway&adultPassengersCount=${p.adults}&fareType=USD` },
-    { key: "alaska", name: "Alaska", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
+    { key: "alaska", tier: 2, name: "Alaska", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => `https://www.alaskaair.com/shopping/flights?tripType=ow&adults=${p.adults}&prior=AS&departureCity=${o}&arrivalCity=${d}&departureDate=${mdy(date)}` },
-    { key: "frontier", name: "Frontier", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
+    { key: "frontier", tier: 0, name: "Frontier", home: "NA", skip: ["JFK"], serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => { const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; const [, m, dd] = ymd(date); return `https://booking.flyfrontier.com/Flight/InternalSelect?o1=${o}&d1=${d}&dd1=${mon[+m - 1]}+${+dd}&ADT=${p.adults}&mon=true&r=false`; } },
-    { key: "aircanada", name: "Air Canada", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["CA"])),
+    { key: "aircanada", tier: 2, name: "Air Canada", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["CA"])),
       url: (o, d, date, p, c) => `https://flightbookings.aircanada.com/en-us/#/search?legs=${o}:${d}::${date}&pax=${p.adults}:0:0:0:0:0&cabin=${{ economy: "economy", "premium-economy": "premiumEconomy", business: "business", first: "business" }[c]}` },
-    { key: "british", name: "British Airways", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
+    { key: "british", tier: 2, name: "British Airways", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p, c) => `https://www.britishairways.com/travel/book/public/en_us?eId=111091&from=${o}&to=${d}&depDate=${date}&cabin=${{ economy: "M", "premium-economy": "W", business: "C", first: "F" }[c]}&ad=${p.adults}&yf=0&ch=0&inf=0&trip=ow` },
-    { key: "lufthansa", name: "Lufthansa", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
+    { key: "lufthansa", tier: 2, name: "Lufthansa", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p) => `https://www.lufthansa.com/us/en/select-flights?searchType=ONEWAY&cbm=ECO&li=0&pax=a${p.adults}&segments=${o}-${d}-${date}` },
-    { key: "airfrance", name: "Air France", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
+    { key: "airfrance", tier: 2, name: "Air France", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p, c) => `https://www.airfrance.us/search/offer?pax=${p.adults}:0:0:0:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "FIRST" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
-    { key: "klm", name: "KLM", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
+    { key: "klm", tier: 2, name: "KLM", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p, c) => `https://www.klm.us/search/offer?pax=${p.adults}:0:0:0:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "BUSINESS" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
-    { key: "turkish", name: "Turkish Airlines", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME) || inR(a, EU)) || km > 5000,
+    { key: "turkish", tier: 2, name: "Turkish Airlines", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME) || inR(a, EU)) || km > 5000,
       url: (o, d, date, p) => `https://www.turkishairlines.com/en-us/flights/?origin=${o}&destination=${d}&departureDate=${date}&adult=${p.adults}&tripType=O&cabin=E` },
-    { key: "emirates", name: "Emirates", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
+    { key: "emirates", tier: 2, name: "Emirates", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
       url: (o, d, date, p) => `https://www.emirates.com/us/english/book/flights/?from=${o}&to=${d}&departing=${date}&pax=${p.adults}&class=ECO&triptype=OW` },
-    { key: "qatar", name: "Qatar Airways", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
+    { key: "qatar", tier: 2, name: "Qatar Airways", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
       url: (o, d, date, p, c) => `https://www.qatarairways.com/en-us/booking/book-flights.html?from=${o}&to=${d}&departing=${date}&adults=${p.adults}&travelClass=${{ economy: "Economy", "premium-economy": "Economy", business: "Business", first: "First" }[c]}&tripType=O` },
-    { key: "singapore", name: "Singapore Airlines", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ASIA)),
+    { key: "singapore", tier: 2, name: "Singapore Airlines", home: "ASIA", serves: (o, d, km) => either(o, d, (a) => inR(a, ["SG"])) || (either(o, d, (a) => inR(a, ASIA)) && km > 2500),
       url: (o, d, date, p, c) => `https://www.singaporeair.com/en_UK/plan-and-book/booking/?from=${o}&to=${d}&departDate=${date}&cabinClass=${{ economy: "Y", "premium-economy": "S", business: "J", first: "F" }[c]}&adult=${p.adults}&type=one-way` },
-    { key: "cathay", name: "Cathay Pacific", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ASIA)),
+    { key: "cathay", tier: 2, name: "Cathay Pacific", home: "ASIA", serves: (o, d, km) => either(o, d, (a) => inR(a, ["HK"])) || (either(o, d, (a) => inR(a, ASIA)) && km > 2500),
       url: (o, d, date, p, c) => `https://www.cathaypacific.com/cx/en_US/book-a-trip/flight-search.html?origin=${o}&destination=${d}&departDate=${date}&cabin=${{ economy: "Y", "premium-economy": "W", business: "J", first: "F" }[c]}&adults=${p.adults}&tripType=OW` },
+
+    // Low-cost carriers. `skip` lists big airports they don't fly from.
+    // Links marked "home page" open the airline's booking page; their search URLs aren't stable.
+    { key: "ryanair", tier: 0, name: "Ryanair", home: "EU", skip: EU_MAJORS,
+      serves: (o, d) => both(o, d, (a) => inR(a, EU) && a.country !== "IS"),
+      url: (o, d, date, p) => `https://www.ryanair.com/gb/en/trip/flights/select?adults=${p.adults}&teens=0&children=0&infants=0&dateOut=${date}&dateIn=&isConnectedFlight=false&discount=0&isReturn=false&promoCode=&originIata=${o}&destinationIata=${d}&tpAdults=${p.adults}&tpTeens=0&tpChildren=0&tpInfants=0&tpStartDate=${date}&tpEndDate=&tpDiscount=0&tpPromoCode=&tpOriginIata=${o}&tpDestinationIata=${d}` },
+    { key: "easyjet", tier: 0, name: "easyJet", home: "EU", skip: ["LHR", "LCY", "FRA", "MUC", "HEL", "ARN", "OSL"],
+      serves: (o, d) => both(o, d, (a) => inR(a, EU)),
+      url: (o, d, date, p) => `https://www.easyjet.com/deeplink?lang=EN&dep=${o}&dest=${d}&dd=${date}&rd=&apax=${p.adults}&cpax=0&ipax=0&isOneWay=on` },
+    { key: "wizz", tier: 0, name: "Wizz Air", home: "EU", skip: EU_MAJORS,
+      serves: (o, d) => both(o, d, (a) => inR(a, EU)) && either(o, d, (a) => inR(a, ["PL", "HU", "RO", "BG", "CZ", "SK", "LT", "LV", "EE", "RS", "HR"])),
+      url: (o, d, date, p) => `https://wizzair.com/en-gb/booking/select-flight/${o}/${d}/${date}/null/${p.adults}/0/0/null` },
+    { key: "vueling", tier: 1, name: "Vueling", home: "EU", serves: (o, d) => both(o, d, (a) => inR(a, EU)) && either(o, d, (a) => inR(a, ["ES"])),
+      url: () => "https://www.vueling.com/en" }, // home page
+    { key: "pegasus", tier: 1, name: "Pegasus", home: "ME", skip: ["IST"],
+      serves: (o, d) => either(o, d, (a) => inR(a, ["TR"])) && both(o, d, (a) => inR(a, EU) || inR(a, ME)),
+      url: () => "https://www.flypgs.com/en" }, // home page
+    { key: "flydubai", tier: 1, name: "flydubai", home: "ME", skip: ["AUH", "SHJ"],
+      serves: (o, d, km) => either(o, d, (a) => inR(a, ["AE"])) && km < 5000,
+      url: () => "https://www.flydubai.com/en/" }, // home page
+    { key: "westjet", tier: 1, name: "WestJet", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["CA"])),
+      url: (o, d, date, p) => `https://www.westjet.com/booking/Create.html?lang=en&type=search&origin=${o}&destination=${d}&adults=${p.adults}&children=0&infants=0&outboundDate=${date}&returnDate=&companionvoucher=false&iswestjetdollars=false&promo=&currency=CAD` },
+    { key: "flair", tier: 0, name: "Flair", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["CA"])),
+      url: () => "https://flyflair.com/" }, // home page
+    { key: "volaris", tier: 0, name: "Volaris", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["MX"])),
+      url: () => "https://www.volaris.com/en" }, // home page
+    { key: "indigo", tier: 0, name: "IndiGo", home: "ASIA", serves: (o, d, km) => either(o, d, (a) => inR(a, ["IN"])) && both(o, d, (a) => inR(a, ASIA) || inR(a, ME)) && km < 7000,
+      url: () => "https://www.goindigo.in/" }, // home page
+    { key: "airasia", tier: 0, name: "AirAsia", home: "ASIA",
+      serves: (o, d) => either(o, d, (a) => inR(a, ["MY", "TH", "ID", "PH", "KH", "VN"])) && both(o, d, (a) => inR(a, ASIA)),
+      url: (o, d, date, p) => { const [y, m, dd] = ymd(date); return `https://www.airasia.com/flights/search/?origin=${o}&destination=${d}&departDate=${dd}%2F${m}%2F${y}&tripType=O&adult=${p.adults}&child=0&infant=0&locale=en-gb&currency=USD&cabinClass=economy`; } },
+    { key: "scoot", tier: 0, name: "Scoot", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ["SG"])) && both(o, d, (a) => inR(a, ASIA)),
+      url: () => "https://www.flyscoot.com/en" }, // home page
+    { key: "jetstar", tier: 0, name: "Jetstar", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ["AU", "NZ"])) && both(o, d, (a) => inR(a, ASIA)),
+      url: (o, d, date, p) => `https://booking.jetstar.com/au/en/booking/search-flights?origin1=${o}&destination1=${d}&departuredate1=${date}&adults=${p.adults}&children=0&infants=0` },
   ];
 
   const regionOf = (a) => (inR(a, NA) ? "NA" : inR(a, EU) ? "EU" : inR(a, ME) ? "ME" : inR(a, ASIA) ? "ASIA" : "OTHER");
@@ -518,7 +574,8 @@
   function airlinesForRoute(map, from, to) {
     const o = map[from], d = map[to];
     const km = o && d ? dist(map, from, to) : 0;
-    let list = AIRLINES.filter((a) => a.serves(o, d, km));
+    const flies = (a) => !(a.skip && (a.skip.includes(from) || a.skip.includes(to)));
+    let list = AIRLINES.filter((a) => flies(a) && a.serves(o, d, km));
     if (!list.length) list = AIRLINES.filter((a) => ["delta", "united", "emirates", "turkish"].includes(a.key));
     const ro = regionOf(o), rd = regionOf(d);
     const rank = (a) => (a.home === ro ? 0 : a.home === rd ? 1 : 2);
@@ -527,7 +584,24 @@
 
   function airlineLinks(map, from, to, date, cabin, pax) {
     const p = { adults: pax.adults };
-    return airlinesForRoute(map, from, to).map((a) => ({ key: a.key, name: a.name, url: a.url(from, to, date, p, cabin) }));
+    return airlinesForRoute(map, from, to).map((a) => ({ key: a.key, name: a.name, tier: a.tier, url: a.url(from, to, date, p, cabin) }));
+  }
+
+  /**
+   * The airline most likely to have the lowest fare: the lowest-cost type of carrier flying the
+   * route (ultra-low-cost, then low-cost, then full-service), most relevant first. For business
+   * and first, which low-cost carriers mostly don't sell, it's the most relevant full-service
+   * airline. A guide only: Google Flights shows the real cheapest fare for the day.
+   */
+  function cheapestAirline(map, from, to, cabin = "economy") {
+    const list = airlinesForRoute(map, from, to);
+    if (cabin === "business" || cabin === "first") return list.find((a) => a.tier === 2) || list[0] || null;
+    return list.reduce((best, a) => (!best || a.tier < best.tier ? a : best), null);
+  }
+
+  function cheapestAirlineLink(map, from, to, date, cabin, pax) {
+    const a = cheapestAirline(map, from, to, cabin);
+    return a ? { key: a.key, name: a.name, tier: a.tier, url: a.url(from, to, date, { adults: pax.adults }, cabin) } : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -604,6 +678,8 @@
     itin.legs.forEach((l, i) => {
       lines.push(`Leg ${i + 1}${l.isReturn ? " (return)" : ""}: ${airportLabel(map, l.from)} → ${airportLabel(map, l.to)} — ${formatDate(l.date)} — ~${formatDuration(estimateFlightMinutes(map, l.from, l.to))} flight — ~${formatMoney(l.cost || 0, currency)}`);
       lines.push(`  Search: ${googleFlightsUrl(l.from, l.to, l.date, cabin, pax, currency)}`);
+      const cheap = cheapestAirlineLink(map, l.from, l.to, l.date, cabin, pax);
+      if (cheap) lines.push(`  Likely cheapest (${cheap.name}): ${cheap.url}`);
     });
     lines.push("", "Estimates are approximate. Each leg is booked separately.");
     return lines.join("\n");
@@ -674,6 +750,8 @@
     AIRLINES,
     airlinesForRoute,
     airlineLinks,
+    cheapestAirline,
+    cheapestAirlineLink,
     DEFAULT_STATE,
     MAX_AVOID,
     serializeState,
