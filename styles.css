@@ -78,6 +78,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .stop-num { font-weight: 700; color: var(--accent); font-size: 14px; min-width: 24px; }
 .stop-fields { display: flex; gap: 8px; align-items: end; flex: 1; min-width: 200px; flex-wrap: wrap; }
 .stop-fields .field { flex: 1; min-width: 100px; }
+.stop-fields .stop-continent { flex: 0 0 220px; }
+.itin-note { color: var(--accent); }
 .stop-suggest-label { color: var(--muted); font-size: 13px; font-style: italic; padding: 10px 0; }
 .remove-stop { background: none; border: none; color: var(--err); cursor: pointer; font-size: 20px; padding: 4px 8px; }
 
@@ -164,6 +166,7 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   .stop-fields { min-width: 0; }
   .stop-fields .field { min-width: 0; flex: 1 1 0; }
   .stop-suggest-label { padding: 2px 0; }
+  .stop-fields .stop-continent { flex: 1 1 100%; }
 
   .grid-pax { gap: 8px; }
   .grid-options { grid-template-columns: 2fr minmax(90px, 1fr); gap: 10px; }

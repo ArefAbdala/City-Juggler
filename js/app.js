@@ -1,6 +1,6 @@
 import {
   todayISO, addDays, validateStopDates, indexAirports, searchAirports, resolveAirport, airportLabel,
-  buildItineraries, googleFlightsUrl, airlineLinks, formatMoney, formatDate, CURRENCIES,
+  buildItineraries, googleFlightsUrl, airlineLinks, formatMoney, formatDate, CURRENCIES, CONTINENTS,
   serializeState, parseState, itineraryToText, itineraryToICS,
 } from "./lib.js";
 
@@ -166,6 +166,13 @@ function renderStops() {
       ${seg(`stop-${i}-mode`, `Stop ${i + 1}: how to choose`, [["fixed", "I know where"], ["suggest", "Suggest for me"]], s.mode, `data-idx="${i}" data-mode`)}
       ${s.mode === "suggest" ? seg(`stop-${i}-country`, `Stop ${i + 1}: country`, [["any", "Any country"], ["same", "Same country"], ["different", "Different country"]], s.country, `data-idx="${i}" data-country`) : ""}
       <div class="stop-fields">
+        ${s.mode === "suggest" ? `
+          <div class="field stop-continent">
+            <label for="stop-continent-${i}">Preferred continent</label>
+            <select id="stop-continent-${i}" class="stop-continent-select" data-idx="${i}">
+              ${CONTINENTS.map(([v, l]) => `<option value="${v}"${(s.continent || "any") === v ? " selected" : ""}>${l}</option>`).join("")}
+            </select>
+          </div>` : ""}
         ${s.mode === "fixed" ? `
           <div class="field ac-wrap">
             <label for="stop-airport-${i}">Airport</label>
@@ -176,7 +183,7 @@ function renderStops() {
             <label for="stop-date-${i}">Leave on <span class="label-note">optional</span></label>
             <input id="stop-date-${i}" type="date" class="stop-date" value="${esc(s.date || "")}" data-idx="${i}" min="${$("depart").value}">
           </div>
-        ` : `<div class="stop-suggest-label">We'll recommend stopover cities along your route that match your country preference.</div>`}
+        ` : `<div class="stop-suggest-label">We'll recommend stopover cities along your route that match your country and continent preference.</div>`}
       </div>
       <button type="button" class="remove-stop" data-idx="${i}" aria-label="Remove stop ${i + 1}">×</button>
     </div>`).join("");
@@ -186,6 +193,7 @@ function renderStops() {
     container.querySelector(`input[name="stop-${r.dataset.idx}-mode"]:checked`).focus();
   }));
   container.querySelectorAll("[data-country]").forEach((r) => r.addEventListener("change", () => { stops[+r.dataset.idx].country = r.value; }));
+  container.querySelectorAll(".stop-continent-select").forEach((sel) => sel.addEventListener("change", () => { stops[+sel.dataset.idx].continent = sel.value; }));
   container.querySelectorAll(".stop-airport").forEach((inp) => {
     const i = +inp.dataset.idx;
     setupAutocomplete(inp, $(`stop-ac-${i}`), (v) => { stops[i].airport = v; });
@@ -198,7 +206,7 @@ function renderStops() {
   updateDateFields();
 }
 $("add-stop").addEventListener("click", () => {
-  stops.push({ mode: "fixed", airport: "", date: "", country: "any" }); renderStops();
+  stops.push({ mode: "fixed", airport: "", date: "", country: "any", continent: "any" }); renderStops();
   $(`stop-airport-${stops.length - 1}`).focus();
 });
 
@@ -279,7 +287,7 @@ function plan() {
   const pax = { adults: s.adults, children: s.children, infants: s.infants };
   const opts = { cabin: s.cabin, pax, currency: s.currency };
   const { itineraries, warnings } = buildItineraries({
-    map: airportMap, hubs,
+    map: airportMap, hubs, airports, today: todayISO(),
     depAirports: [...new Set([origin, ...depA])], arrAirports: [...new Set([dest, ...arrA])],
     stops: s.stops.map((st, i) => ({ ...st, airport: stopCodes[i] })),
     depart: s.depart, end: s.end || s.depart, roundTrip: s.trip === "round", cabin: s.cabin, pax,
@@ -321,6 +329,7 @@ function renderItineraries(itineraries, opts) {
       <div class="itin-header">
         <div>
           <h2 class="itin-route">${esc(routeStr)}${cheapest ? ' <span class="tag cheapest">Cheapest</span>' : ""}</h2>
+          ${itin.note ? `<div class="sub itin-note">${esc(itin.note)}</div>` : ""}
           <div class="sub">${esc(formatDate(first))}${first !== last ? ` – ${esc(formatDate(last))}` : ""} · ${itin.legs.length} flight${itin.legs.length > 1 ? "s" : ""}</div>
         </div>
         <div class="itin-total-cost">~${esc(formatMoney(itin.totalCost, currency))}</div>

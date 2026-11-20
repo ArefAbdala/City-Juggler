@@ -7,7 +7,8 @@ const airports = JSON.parse(readFileSync(new URL("../airports.json", import.meta
 const hubs = JSON.parse(readFileSync(new URL("../hub_cities.json", import.meta.url)));
 const map = L.indexAirports(airports);
 const pax1 = { adults: 1, children: 0, infants: 0 };
-const base = { map, hubs, depart: "2026-12-10", end: "2026-12-17", roundTrip: false, cabin: "economy", pax: pax1 };
+const requested = (its) => its.filter((i) => !i.note); // exclude nearby-airport / flexible-date extras
+const base = { map, hubs, airports, depart: "2026-12-10", end: "2026-12-17", roundTrip: false, cabin: "economy", pax: pax1 };
 
 test("data: every hub exists in airports.json", () => {
   for (const h of hubs) assert.ok(map[h.code], `hub ${h.code} missing from airports.json`);
@@ -92,7 +93,7 @@ test("country filter is respected", () => {
 
 test("round trip appends a return flight on the end date", () => {
   const { itineraries } = L.buildItineraries({ ...base, roundTrip: true, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [] });
-  const [it] = itineraries;
+  const [it] = requested(itineraries);
   assert.deepEqual(it.codes, ["MCO", "LHR", "MCO"]);
   assert.deepEqual(it.legs.map((l) => l.date), ["2026-12-10", "2026-12-17"]);
   assert.ok(it.legs[1].isReturn);
@@ -101,13 +102,13 @@ test("round trip appends a return flight on the end date", () => {
 test("fixed stop with date flies out on that date", () => {
   const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LHR"],
     stops: [{ mode: "fixed", airport: "JFK", date: "2026-12-13" }] });
-  assert.deepEqual(itineraries[0].legs.map((l) => [l.from, l.to, l.date]),
+  assert.deepEqual(requested(itineraries)[0].legs.map((l) => [l.from, l.to, l.date]),
     [["MCO", "JFK", "2026-12-10"], ["JFK", "LHR", "2026-12-13"]]);
 });
 
 test("every leg has a cost and alternates are compared", () => {
   const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO", "TPA"], arrAirports: ["LHR", "LGW"], stops: [] });
-  assert.equal(itineraries.length, 4);
+  assert.equal(requested(itineraries).length, 4);
   for (const it of itineraries) for (const l of it.legs) assert.ok(l.cost > 0);
   const costs = itineraries.map((i) => i.totalCost);
   assert.deepEqual(costs, [...costs].sort((a, b) => a - b));
@@ -146,16 +147,16 @@ test("airline and Google links carry passengers, cabin and currency", () => {
 test("state round-trips through the URL and rejects junk", () => {
   const s = { ...L.DEFAULT_STATE, origin: "MCO", destination: "London", depAlts: ["TPA"], arrAlts: [], depart: "2026-12-10", end: "2026-12-20",
     trip: "oneway", adults: 2, children: 1, infants: 1, cabin: "business", currency: "GBP",
-    stops: [{ mode: "fixed", airport: "JFK", date: "2026-12-12", country: "any" }, { mode: "suggest", airport: "", date: "", country: "different" }] };
+    stops: [{ mode: "fixed", airport: "JFK", date: "2026-12-12", country: "any", continent: "any" }, { mode: "suggest", airport: "", date: "", country: "different", continent: "europe" }] };
   assert.deepEqual(L.parseState(L.serializeState(s)), s);
-  const junk = L.parseState("from=MCO&to=X&adults=99&cabin=<script>&cur=XXX&depart=tomorrow&stops=a:b;suggest:evil");
+  const junk = L.parseState("from=MCO&to=X&adults=99&cabin=<script>&cur=XXX&depart=tomorrow&stops=a:b;suggest:evil:mars");
   assert.equal(junk.adults, 1); assert.equal(junk.cabin, "economy"); assert.equal(junk.currency, "USD"); assert.equal(junk.depart, "");
-  assert.deepEqual(junk.stops.map((x) => [x.mode, x.airport, x.country]), [["fixed", "", "any"], ["suggest", "", "any"]]);
+  assert.deepEqual(junk.stops.map((x) => [x.mode, x.airport, x.country, x.continent]), [["fixed", "", "any", "any"], ["suggest", "", "any", "any"]]);
   assert.equal(L.parseState(""), null);
 });
 
 test("text and calendar exports include every leg", () => {
-  const { itineraries: [it] } = L.buildItineraries({ ...base, roundTrip: true, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [] });
+  const [it] = requested(L.buildItineraries({ ...base, roundTrip: true, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [] }).itineraries);
   const opts = { cabin: "economy", pax: pax1, currency: "USD" };
   const txt = L.itineraryToText(it, map, opts);
   assert.match(txt, /Leg 1: Orlando \(MCO\) → London \(LHR\)/);
@@ -169,4 +170,37 @@ test("text and calendar exports include every leg", () => {
 test("formatMoney converts currency", () => {
   assert.equal(L.formatMoney(100, "USD"), "$100");
   assert.equal(L.formatMoney(100, "EUR"), "€92");
+});
+
+// --- Ported from main: continent filter, wider detours, minimum results, day-of-week pricing
+test("continent preference is respected, widening the detour when needed", () => {
+  const { itineraries, warnings } = L.buildItineraries({ ...base, depAirports: ["JFK"], arrAirports: ["LHR"],
+    stops: [{ mode: "suggest", country: "any", continent: "africa" }] });
+  assert.equal(warnings.length, 0);
+  for (const it of requested(itineraries)) assert.equal(L.COUNTRY_CONTINENT[map[it.codes[1]].country], "africa", it.codes.join(">"));
+});
+
+test("on-route hubs are used before wider detours", () => {
+  const c = L.hubCandidates(hubs, map, "MCO", "SIN", { count: 5 });
+  assert.equal(c.length, 5);
+  assert.ok(c.every((h) => h.detour <= 1 + L.MAX_DETOUR));
+});
+
+test("at least 8 itineraries, filled with nearby airports then flexible dates", () => {
+  const { itineraries } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [], today: "2026-12-01" });
+  assert.ok(itineraries.length >= L.MIN_RESULTS && itineraries.length <= L.MAX_RESULTS);
+  assert.ok(itineraries.some((i) => /^Nearby (departure|arrival) airport/.test(i.note)));
+  assert.ok(itineraries.every((i) => !i.note || /^(Nearby|Flexible dates)/.test(i.note)));
+});
+
+test("flexible dates never start before today", () => {
+  const { itineraries } = L.buildItineraries({ ...base, depart: "2026-12-10", depAirports: ["MCO"], arrAirports: ["LHR"], stops: [], today: "2026-12-10", airports: [] });
+  assert.ok(itineraries.length >= L.MIN_RESULTS);
+  assert.ok(itineraries.every((i) => i.legs[0].date >= "2026-12-10"));
+});
+
+test("day-of-week factor: Wednesday cheaper than Friday", () => {
+  const wed = L.estimateCost(map, "MCO", "LHR", "economy", pax1, "2026-12-09");
+  const fri = L.estimateCost(map, "MCO", "LHR", "economy", pax1, "2026-12-11");
+  assert.ok(wed < fri);
 });
