@@ -6,7 +6,7 @@ import * as L from "../js/lib.js";
 const airports = JSON.parse(readFileSync(new URL("../airports.json", import.meta.url)));
 const hubs = JSON.parse(readFileSync(new URL("../hub_cities.json", import.meta.url)));
 const map = L.indexAirports(airports);
-const pax1 = { adults: 1, children: 0, infants: 0 };
+const pax1 = { adults: 1 };
 const requested = (its) => its.filter((i) => !i.note); // exclude nearby-airport / flexible-date extras
 const base = { map, hubs, airports, depart: "2026-12-10", end: "2026-12-17", cabin: "economy", pax: pax1 };
 
@@ -116,12 +116,10 @@ test("every leg has a cost and alternates are compared", () => {
   assert.deepEqual(costs, [...costs].sort((a, b) => a - b));
 });
 
-test("estimateCost scales with cabin and passenger types", () => {
+test("estimateCost scales with cabin and travellers", () => {
   const one = L.estimateCost(map, "MCO", "LHR", "economy", pax1);
-  assert.ok(Math.abs(L.estimateCost(map, "MCO", "LHR", "economy", { adults: 2, children: 0, infants: 0 }) - one * 2) <= 1);
+  assert.ok(Math.abs(L.estimateCost(map, "MCO", "LHR", "economy", { adults: 2 }) - one * 2) <= 1);
   assert.ok(L.estimateCost(map, "MCO", "LHR", "business", pax1) > one * 3);
-  const fam = L.estimateCost(map, "MCO", "LHR", "economy", { adults: 2, children: 1, infants: 1 });
-  assert.ok(Math.abs(fam - one * 2.85) <= 2);
 });
 
 // --- Booking links -----------------------------------------------------------
@@ -136,19 +134,19 @@ test("airline selection matches the route", () => {
 });
 
 test("airline and Google links carry passengers, cabin and currency", () => {
-  const pax = { adults: 2, children: 1, infants: 1 };
+  const pax = { adults: 2 };
   const links = Object.fromEntries(L.airlineLinks(map, "JFK", "LHR", "2026-12-10", "business", pax).map((l) => [l.key, l.url]));
-  assert.match(links.british, /cabin=C&ad=2&yf=0&ch=1&inf=1/);
-  assert.match(links.jetblue, /adults=2&children=1&infants=1/);
+  assert.match(links.british, /cabin=C&ad=2&yf=0&ch=0&inf=0/);
+  assert.match(links.jetblue, /adults=2&sharedMarket/);
   const gf = decodeURIComponent(L.googleFlightsUrl("JFK", "LHR", "2026-12-10", "business", pax, "EUR"));
-  assert.match(gf, /business class for 2 adults, 1 child, 1 infant/);
+  assert.match(gf, /business class for 2 adults/);
   assert.match(gf, /curr=EUR/);
 });
 
 // --- Sharing & export --------------------------------------------------------
 test("state round-trips through the URL and rejects junk", () => {
   const s = { ...L.DEFAULT_STATE, origin: "MCO", destination: "London", depAlts: ["TPA"], arrAlts: [], depart: "2026-12-10", end: "2026-12-20",
-    returnHome: false, adults: 2, children: 1, infants: 1, cabin: "business", currency: "GBP",
+    returnHome: false, adults: 2, cabin: "business", currency: "GBP",
     stops: [{ mode: "fixed", airport: "JFK", date: "2026-12-12", country: "any", continent: "any" }, { mode: "suggest", airport: "", date: "", country: "different", continent: "europe" }] };
   assert.deepEqual(L.parseState(L.serializeState(s)), s);
   const junk = L.parseState("from=MCO&to=X&adults=99&cabin=<script>&cur=XXX&depart=tomorrow&stops=a:b;suggest:evil:mars");

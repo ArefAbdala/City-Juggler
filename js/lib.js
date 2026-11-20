@@ -254,7 +254,6 @@ export function nearbyAirports(list, map, code, maxKm = 250, count = 3) {
 // Cost estimate & currency
 // ---------------------------------------------------------------------------
 export const CABIN_MULT = { economy: 1, "premium-economy": 1.6, business: 3.2, first: 5.5 };
-export const CHILD_FARE = 0.75, INFANT_FARE = 0.1;
 // Rough day-of-week effect: midweek and Saturday departures tend to be cheaper (Sun..Sat).
 export const DOW_FACTOR = [1.08, 1.0, 0.92, 0.92, 1.0, 1.1, 0.95];
 
@@ -265,7 +264,7 @@ export function estimateCost(map, from, to, cabin, pax, date) {
   const rate = d < 500 ? 0.25 : d < 1500 ? 0.15 : d < 4000 ? 0.1 : d < 8000 ? 0.08 : 0.07;
   const dow = date ? DOW_FACTOR[parseISO(date).getDay()] : 1;
   const seat = Math.max(45, d * rate) * (CABIN_MULT[cabin] || 1) * dow;
-  return Math.round(seat * (pax.adults + CHILD_FARE * (pax.children || 0) + INFANT_FARE * (pax.infants || 0)));
+  return Math.round(seat * pax.adults);
 }
 
 // Approximate, fixed exchange rates (USD base). Estimates only.
@@ -416,16 +415,12 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export function paxPhrase(pax) {
-  const parts = [plural(pax.adults, "adult", "adults")];
-  if (pax.children) parts.push(plural(pax.children, "child", "children"));
-  if (pax.infants) parts.push(plural(pax.infants, "infant", "infants"));
-  return parts.join(", ");
+  return plural(pax.adults, "adult", "adults");
 }
 
 export function googleFlightsUrl(from, to, date, cabin, pax, currency = "USD") {
   const cabinStr = { economy: "", "premium-economy": " premium economy", business: " business class", first: " first class" }[cabin] || "";
-  const total = pax.adults + (pax.children || 0) + (pax.infants || 0);
-  const who = total > 1 ? ` for ${paxPhrase(pax)}` : "";
+  const who = pax.adults > 1 ? ` for ${paxPhrase(pax)}` : "";
   const q = `Flights from ${from} to ${to} on ${date} one way${cabinStr}${who}`;
   return `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}&curr=${currency}`;
 }
@@ -445,40 +440,40 @@ const mdy = (date) => { const [y, m, d] = ymd(date); return `${m}%2F${d}%2F${y}`
 // Deep links are best-effort and may need updating when airlines change their sites.
 export const AIRLINES = [
   { key: "delta", name: "Delta", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
-    url: (o, d, date, p) => `https://www.delta.com/flight-search/search?action=findFlights&tripType=ONE_WAY&originCity=${o}&destinationCity=${d}&departureDate=${mdy(date)}&paxCount=${p.adults + p.children}&searchByCabin=true` },
+    url: (o, d, date, p) => `https://www.delta.com/flight-search/search?action=findFlights&tripType=ONE_WAY&originCity=${o}&destinationCity=${d}&departureDate=${mdy(date)}&paxCount=${p.adults}&searchByCabin=true` },
   { key: "american", name: "American", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
-    url: (o, d, date, p) => { const slices = JSON.stringify([{ orig: o, origNearby: false, dest: d, destNearby: false, date }]); return `https://www.aa.com/booking/search?locale=en_US&pax=${p.adults}&adult=${p.adults}&child=${p.children}&type=OneWay&searchType=Revenue&cabin=&carriers=ALL&slices=${encodeURIComponent(slices)}`; } },
+    url: (o, d, date, p) => { const slices = JSON.stringify([{ orig: o, origNearby: false, dest: d, destNearby: false, date }]); return `https://www.aa.com/booking/search?locale=en_US&pax=${p.adults}&adult=${p.adults}&type=OneWay&searchType=Revenue&cabin=&carriers=ALL&slices=${encodeURIComponent(slices)}`; } },
   { key: "united", name: "United", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
-    url: (o, d, date, p) => `https://www.united.com/en/us/fsr/choose-flights?f=${o}&t=${d}&d=${date}&tt=1&sc=7&px=${p.adults + p.children}` },
+    url: (o, d, date, p) => `https://www.united.com/en/us/fsr/choose-flights?f=${o}&t=${d}&d=${date}&tt=1&sc=7&px=${p.adults}` },
   { key: "jetblue", name: "JetBlue", home: "NA",
     serves: (o, d) => both(o, d, (a) => inR(a, NA)) || (either(o, d, (a) => inR(a, ["US"])) && either(o, d, (a) => inR(a, ["GB", "FR", "IE", "NL"]))),
-    url: (o, d, date, p) => `https://www.jetblue.com/booking/flights?from=${o}&to=${d}&depart=${date}&isMultiCity=false&noOfRoute=1&lang=en&adults=${p.adults}&children=${p.children}&infants=${p.infants}&sharedMarket=false&roundTripFares=false` },
+    url: (o, d, date, p) => `https://www.jetblue.com/booking/flights?from=${o}&to=${d}&depart=${date}&isMultiCity=false&noOfRoute=1&lang=en&adults=${p.adults}&sharedMarket=false&roundTripFares=false` },
   { key: "southwest", name: "Southwest", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
     url: (o, d, date, p) => `https://www.southwest.com/air/booking/select.html?originationAirportCode=${o}&destinationAirportCode=${d}&departureDate=${date}&tripType=oneway&adultPassengersCount=${p.adults}&fareType=USD` },
   { key: "alaska", name: "Alaska", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
-    url: (o, d, date, p) => `https://www.alaskaair.com/shopping/flights?tripType=ow&adults=${p.adults}&children=${p.children}&prior=AS&departureCity=${o}&arrivalCity=${d}&departureDate=${mdy(date)}` },
+    url: (o, d, date, p) => `https://www.alaskaair.com/shopping/flights?tripType=ow&adults=${p.adults}&prior=AS&departureCity=${o}&arrivalCity=${d}&departureDate=${mdy(date)}` },
   { key: "frontier", name: "Frontier", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
-    url: (o, d, date, p) => { const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; const [, m, dd] = ymd(date); return `https://booking.flyfrontier.com/Flight/InternalSelect?o1=${o}&d1=${d}&dd1=${mon[+m - 1]}+${+dd}&ADT=${p.adults}&CHD=${p.children}&INF=${p.infants}&mon=true&r=false`; } },
+    url: (o, d, date, p) => { const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; const [, m, dd] = ymd(date); return `https://booking.flyfrontier.com/Flight/InternalSelect?o1=${o}&d1=${d}&dd1=${mon[+m - 1]}+${+dd}&ADT=${p.adults}&mon=true&r=false`; } },
   { key: "aircanada", name: "Air Canada", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["CA"])),
-    url: (o, d, date, p, c) => `https://flightbookings.aircanada.com/en-us/#/search?legs=${o}:${d}::${date}&pax=${p.adults}:0:${p.children}:${p.infants}:0:0&cabin=${{ economy: "economy", "premium-economy": "premiumEconomy", business: "business", first: "business" }[c]}` },
+    url: (o, d, date, p, c) => `https://flightbookings.aircanada.com/en-us/#/search?legs=${o}:${d}::${date}&pax=${p.adults}:0:0:0:0:0&cabin=${{ economy: "economy", "premium-economy": "premiumEconomy", business: "business", first: "business" }[c]}` },
   { key: "british", name: "British Airways", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
-    url: (o, d, date, p, c) => `https://www.britishairways.com/travel/book/public/en_us?eId=111091&from=${o}&to=${d}&depDate=${date}&cabin=${{ economy: "M", "premium-economy": "W", business: "C", first: "F" }[c]}&ad=${p.adults}&yf=0&ch=${p.children}&inf=${p.infants}&trip=ow` },
+    url: (o, d, date, p, c) => `https://www.britishairways.com/travel/book/public/en_us?eId=111091&from=${o}&to=${d}&depDate=${date}&cabin=${{ economy: "M", "premium-economy": "W", business: "C", first: "F" }[c]}&ad=${p.adults}&yf=0&ch=0&inf=0&trip=ow` },
   { key: "lufthansa", name: "Lufthansa", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
-    url: (o, d, date, p) => `https://www.lufthansa.com/us/en/select-flights?searchType=ONEWAY&cbm=ECO&li=0&pax=a${p.adults}${p.children ? `c${p.children}` : ""}${p.infants ? `i${p.infants}` : ""}&segments=${o}-${d}-${date}` },
+    url: (o, d, date, p) => `https://www.lufthansa.com/us/en/select-flights?searchType=ONEWAY&cbm=ECO&li=0&pax=a${p.adults}&segments=${o}-${d}-${date}` },
   { key: "airfrance", name: "Air France", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
-    url: (o, d, date, p, c) => `https://www.airfrance.us/search/offer?pax=${p.adults}:0:${p.children}:${p.infants}:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "FIRST" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
+    url: (o, d, date, p, c) => `https://www.airfrance.us/search/offer?pax=${p.adults}:0:0:0:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "FIRST" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
   { key: "klm", name: "KLM", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
-    url: (o, d, date, p, c) => `https://www.klm.us/search/offer?pax=${p.adults}:0:${p.children}:${p.infants}:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "BUSINESS" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
+    url: (o, d, date, p, c) => `https://www.klm.us/search/offer?pax=${p.adults}:0:0:0:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "BUSINESS" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
   { key: "turkish", name: "Turkish Airlines", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME) || inR(a, EU)) || km > 5000,
-    url: (o, d, date, p) => `https://www.turkishairlines.com/en-us/flights/?origin=${o}&destination=${d}&departureDate=${date}&adult=${p.adults}&child=${p.children}&infant=${p.infants}&tripType=O&cabin=E` },
+    url: (o, d, date, p) => `https://www.turkishairlines.com/en-us/flights/?origin=${o}&destination=${d}&departureDate=${date}&adult=${p.adults}&tripType=O&cabin=E` },
   { key: "emirates", name: "Emirates", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
     url: (o, d, date, p) => `https://www.emirates.com/us/english/book/flights/?from=${o}&to=${d}&departing=${date}&pax=${p.adults}&class=ECO&triptype=OW` },
   { key: "qatar", name: "Qatar Airways", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
-    url: (o, d, date, p, c) => `https://www.qatarairways.com/en-us/booking/book-flights.html?from=${o}&to=${d}&departing=${date}&adults=${p.adults}&children=${p.children}&infants=${p.infants}&travelClass=${{ economy: "Economy", "premium-economy": "Economy", business: "Business", first: "First" }[c]}&tripType=O` },
+    url: (o, d, date, p, c) => `https://www.qatarairways.com/en-us/booking/book-flights.html?from=${o}&to=${d}&departing=${date}&adults=${p.adults}&travelClass=${{ economy: "Economy", "premium-economy": "Economy", business: "Business", first: "First" }[c]}&tripType=O` },
   { key: "singapore", name: "Singapore Airlines", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ASIA)),
-    url: (o, d, date, p, c) => `https://www.singaporeair.com/en_UK/plan-and-book/booking/?from=${o}&to=${d}&departDate=${date}&cabinClass=${{ economy: "Y", "premium-economy": "S", business: "J", first: "F" }[c]}&adult=${p.adults}&child=${p.children}&infant=${p.infants}&type=one-way` },
+    url: (o, d, date, p, c) => `https://www.singaporeair.com/en_UK/plan-and-book/booking/?from=${o}&to=${d}&departDate=${date}&cabinClass=${{ economy: "Y", "premium-economy": "S", business: "J", first: "F" }[c]}&adult=${p.adults}&type=one-way` },
   { key: "cathay", name: "Cathay Pacific", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ASIA)),
-    url: (o, d, date, p, c) => `https://www.cathaypacific.com/cx/en_US/book-a-trip/flight-search.html?origin=${o}&destination=${d}&departDate=${date}&cabin=${{ economy: "Y", "premium-economy": "W", business: "J", first: "F" }[c]}&adults=${p.adults}&children=${p.children}&infants=${p.infants}&tripType=OW` },
+    url: (o, d, date, p, c) => `https://www.cathaypacific.com/cx/en_US/book-a-trip/flight-search.html?origin=${o}&destination=${d}&departDate=${date}&cabin=${{ economy: "Y", "premium-economy": "W", business: "J", first: "F" }[c]}&adults=${p.adults}&tripType=OW` },
 ];
 
 const regionOf = (a) => (inR(a, NA) ? "NA" : inR(a, EU) ? "EU" : inR(a, ME) ? "ME" : inR(a, ASIA) ? "ASIA" : "OTHER");
@@ -495,7 +490,7 @@ export function airlinesForRoute(map, from, to) {
 }
 
 export function airlineLinks(map, from, to, date, cabin, pax) {
-  const p = { adults: pax.adults, children: pax.children || 0, infants: pax.infants || 0 };
+  const p = { adults: pax.adults };
   return airlinesForRoute(map, from, to).map((a) => ({ key: a.key, name: a.name, url: a.url(from, to, date, p, cabin) }));
 }
 
@@ -504,7 +499,7 @@ export function airlineLinks(map, from, to, date, cabin, pax) {
 // ---------------------------------------------------------------------------
 export const DEFAULT_STATE = {
   origin: "MCO", destination: "", depAlts: [], arrAlts: [], depart: "", end: "", returnHome: false,
-  adults: 1, children: 0, infants: 0, cabin: "economy", currency: "USD", stops: [], avoid: [],
+  adults: 1, cabin: "economy", currency: "USD", stops: [], avoid: [],
 };
 export const MAX_AVOID = 10;
 
@@ -517,8 +512,6 @@ export function serializeState(s) {
   if (s.depart) p.set("depart", s.depart);
   if (s.end) p.set("end", s.end);
   p.set("adults", s.adults);
-  if (s.children) p.set("children", s.children);
-  if (s.infants) p.set("infants", s.infants);
   if (s.cabin !== "economy") p.set("cabin", s.cabin);
   if (s.currency !== "USD") p.set("cur", s.currency);
   if (s.stops.length) p.set("stops", s.stops.map((st) => st.mode === "suggest" ? `suggest:${st.country}${st.continent && st.continent !== "any" ? `:${st.continent}` : ""}` : `${st.airport}:${st.date || ""}`).join(";"));
@@ -553,7 +546,7 @@ export function parseState(query) {
     origin: (p.get("from") || "").slice(0, 60), destination, returnHome,
     depAlts: list("fromAlt"), arrAlts: returnHome ? [] : list("toAlt"),
     depart: isISODate(p.get("depart")) ? p.get("depart") : "", end: isISODate(p.get("end")) ? p.get("end") : "",
-    adults, children: intIn(p.get("children"), 0, 8, 0), infants: Math.min(adults, intIn(p.get("infants"), 0, 9, 0)),
+    adults,
     cabin: CABIN_MULT[p.get("cabin")] ? p.get("cabin") : "economy",
     currency: CURRENCIES[p.get("cur")] ? p.get("cur") : "USD",
     stops,
