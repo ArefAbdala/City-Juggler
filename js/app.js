@@ -49,18 +49,26 @@ $("depart").addEventListener("change", () => {
   document.querySelectorAll(".stop-date").forEach((i) => { i.min = $("depart").value; });
 });
 
-const tripType = () => document.querySelector('input[name="trip"]:checked').value;
-const endUsed = () => tripType() === "round" || stops.length > 0;
+const returnHome = () => $("return-home").checked;
+const endUsed = () => returnHome() || stops.length > 0;
 
 function updateDateFields() {
-  const round = tripType() === "round";
-  $("end-label").textContent = round ? "Return" : "Arrive by";
+  const home = returnHome();
+  $("end-label").textContent = home ? "Return" : "Arrive by";
   $("end-field").hidden = !endUsed();
-  $("date-hint").textContent = round
-    ? "You'll fly home from your destination on the return date."
+  $("date-hint").textContent = home
+    ? "You'll fly home from your last city stop on the return date."
     : stops.length ? "Your last flight (from your final stop to your destination) is on the “Arrive by” date." : "";
 }
-document.querySelectorAll('input[name="trip"]').forEach((r) => r.addEventListener("change", updateDateFields));
+
+function updateReturnHome() {
+  const home = returnHome();
+  $("destination-field").hidden = $("swap").hidden = home;
+  $("arr-alts").hidden = home;
+  $("add-arr-alt").hidden = home || arrAlts.length >= MAX_ALTS;
+  updateDateFields();
+}
+$("return-home").addEventListener("change", updateReturnHome);
 
 $("swap").addEventListener("click", () => {
   const o = $("origin").value; $("origin").value = $("destination").value; $("destination").value = o;
@@ -150,7 +158,7 @@ function renderAlts(prefix) {
     arr.splice(+btn.dataset.idx, 1); renderAlts(prefix);
     $(`add-${prefix}-alt`).focus();
   }));
-  $(`add-${prefix}-alt`).hidden = arr.length >= MAX_ALTS;
+  $(`add-${prefix}-alt`).hidden = arr.length >= MAX_ALTS || (prefix === "arr" && returnHome());
 }
 $("add-dep-alt").addEventListener("click", () => { depAlts.push(""); renderAlts("dep"); $(`dep-alt-${depAlts.length - 1}`).focus(); });
 $("add-arr-alt").addEventListener("click", () => { arrAlts.push(""); renderAlts("arr"); $(`arr-alt-${arrAlts.length - 1}`).focus(); });
@@ -262,7 +270,8 @@ function readState() {
   return {
     origin: $("origin").value.trim(), destination: $("destination").value.trim(),
     depAlts: depAlts.map((a) => a.trim()).filter(Boolean), arrAlts: arrAlts.map((a) => a.trim()).filter(Boolean),
-    depart: $("depart").value, end: endUsed() ? $("ret").value : "", trip: tripType(),
+    returnHome: returnHome(),
+    depart: $("depart").value, end: endUsed() ? $("ret").value : "",
     adults: +$("adults").value, children: +$("children").value, infants: +$("infants").value,
     cabin: $("seat").value, currency: $("currency").value,
     stops: stops.map((s) => ({ ...s })),
@@ -276,13 +285,14 @@ function applyState(s) {
   if (s.depart && s.depart >= today) $("depart").value = s.depart;
   if (s.end && s.end >= $("depart").value) $("ret").value = s.end;
   $("ret").min = $("depart").value;
-  document.querySelector(`input[name="trip"][value="${s.trip}"]`).checked = true;
+  $("return-home").checked = !!s.returnHome;
   $("adults").value = s.adults; syncInfants();
   $("children").value = s.children; $("infants").value = Math.min(s.infants, s.adults);
   $("seat").value = s.cabin; $("currency").value = s.currency;
   stops = s.stops.map((x) => ({ ...x, date: x.date && x.date >= $("depart").value ? x.date : "" }));
   renderStops();
   avoid = [...(s.avoid || [])]; renderAvoid();
+  updateReturnHome();
 }
 
 const storage = {
@@ -306,18 +316,19 @@ function plan() {
   };
 
   const origin = need(s.origin, "a departure airport");
-  const dest = need(s.destination, "an arrival airport");
+  const dest = s.returnHome ? null : need(s.destination, "an arrival airport");
   const depA = s.depAlts.map((v) => need(v, "an alternate departure airport"));
-  const arrA = s.arrAlts.map((v) => need(v, "an alternate arrival airport"));
+  const arrA = s.returnHome ? [] : s.arrAlts.map((v) => need(v, "an alternate arrival airport"));
   const stopCodes = s.stops.map((st, i) => (st.mode === "fixed" ? need(st.airport, `stop ${i + 1}'s airport`) : null));
 
   if (!s.depart) errors.push("Please choose a departure date.");
   else if (s.depart < today) errors.push("Departure date can't be in the past.");
   if (endUsed()) {
-    if (!s.end) errors.push(`Please choose ${s.trip === "round" ? "a return" : "an “arrive by”"} date.`);
-    else if (s.depart && s.end < s.depart) errors.push(`${s.trip === "round" ? "Return" : "“Arrive by”"} date must be on or after the departure date.`);
+    if (!s.end) errors.push(`Please choose ${s.returnHome ? "a return" : "an “arrive by”"} date.`);
+    else if (s.depart && s.end < s.depart) errors.push(`${s.returnHome ? "Return" : "“Arrive by”"} date must be on or after the departure date.`);
   }
-  if (origin && dest && origin === dest) errors.push("Departure and arrival airports must be different.");
+  if (s.returnHome && !s.stops.some((st) => st.mode === "fixed")) errors.push("Since you're returning to where you started, add at least one city stop with “I know where” — that's where you're travelling to.");
+  if (origin && dest && origin === dest) errors.push("Departure and arrival airports must be different. If you're coming back home, tick “My final destination is the same as where I'm departing from”.");
   if (s.infants > s.adults) errors.push("Each infant on a lap needs an adult.");
   if (s.adults + s.children + s.infants > 9) errors.push("Up to 9 travellers can be searched at once.");
   // Drop unknown entries (e.g. from an edited shared link).
@@ -334,7 +345,7 @@ function plan() {
   if (errors.length) { showBanner(errors); $("banner").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
 
   // Show the resolved codes so the user sees what was matched.
-  $("origin").value = origin; $("destination").value = dest;
+  $("origin").value = origin; if (dest) $("destination").value = dest;
   depAlts = depA; arrAlts = arrA; renderAlts("dep"); renderAlts("arr");
   stops.forEach((st, i) => { if (stopCodes[i]) st.airport = stopCodes[i]; });
   renderStops();
@@ -343,9 +354,9 @@ function plan() {
   const opts = { cabin: s.cabin, pax, currency: s.currency };
   const { itineraries, warnings } = buildItineraries({
     map: airportMap, hubs, airports, today: todayISO(),
-    depAirports: [...new Set([origin, ...depA])], arrAirports: [...new Set([dest, ...arrA])],
+    depAirports: [...new Set([origin, ...depA])], arrAirports: s.returnHome ? [] : [...new Set([dest, ...arrA])],
     stops: s.stops.map((st, i) => ({ ...st, airport: stopCodes[i] })),
-    depart: s.depart, end: s.end || s.depart, roundTrip: s.trip === "round", cabin: s.cabin, pax, avoid: s.avoid,
+    depart: s.depart, end: s.end || s.depart, returnHome: s.returnHome, cabin: s.cabin, pax, avoid: s.avoid,
   });
 
   if (warnings.length) showBanner(warnings, "info"); else clearBanner();

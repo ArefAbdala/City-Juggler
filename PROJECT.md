@@ -8,7 +8,7 @@ A fully static trip planning tool. Build multi-stop itineraries, get stopover re
 
 ## Features
 
-- **Round trip or one way**: Round trips add a flight home on the return date; one-way trips fly the last leg on the "Arrive by" date
+- **Return home option**: Tick "My final destination is the same as where I'm departing from" to end the trip back at your departure airport — the arrival field is hidden and the flight home from your last stop is on the "Return" date. Otherwise the last leg to your destination flies on the "Arrive by" date
 - **Multi-stop trips**: Up to 4 city stops between departure and arrival, each either an airport you choose (with an optional "leave on" date) or "Suggest for me"
 - **Stop suggestions**: Recommends hub cities (from 110 hubs) with the least detour between the neighbouring points of your route. On-route hubs (≤30% detour) are preferred; the allowed detour widens (60%, 100%, 200%) only when needed to find enough matches. Several suggested stops get distinct cities, ordered so the route never doubles back. If none fits (e.g. very short trips), you're told why
 - **No repeated stopovers across itineraries**: every itinerary in a search gets its own suggested stop cities — a city shown as a stop in one result (counting all its airports, e.g. NRT/HND) never appears as a suggested stop in another. Fresh stops never widen the detour beyond what the best choices needed, so long multi-stop trips may show fewer results rather than far-off stopovers

@@ -8,7 +8,7 @@ const hubs = JSON.parse(readFileSync(new URL("../hub_cities.json", import.meta.u
 const map = L.indexAirports(airports);
 const pax1 = { adults: 1, children: 0, infants: 0 };
 const requested = (its) => its.filter((i) => !i.note); // exclude nearby-airport / flexible-date extras
-const base = { map, hubs, airports, depart: "2026-12-10", end: "2026-12-17", roundTrip: false, cabin: "economy", pax: pax1 };
+const base = { map, hubs, airports, depart: "2026-12-10", end: "2026-12-17", cabin: "economy", pax: pax1 };
 
 test("data: every hub exists in airports.json", () => {
   for (const h of hubs) assert.ok(map[h.code], `hub ${h.code} missing from airports.json`);
@@ -24,19 +24,14 @@ test("dates: local ISO helpers don't drift across DST or month ends", () => {
   assert.equal(L.todayISO(new Date(2026, 10, 19, 23, 30)), "2026-11-19"); // late evening stays "today"
 });
 
-test("scheduleDates: round trip spreads stops and returns on end date", () => {
-  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-17", [], true), ["2026-12-10", "2026-12-17"]);
-  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-16", [null, null], true), ["2026-12-10", "2026-12-12", "2026-12-14", "2026-12-16"]);
-});
-
-test("scheduleDates: one way flies the last leg on the end date", () => {
-  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-17", [], false), ["2026-12-10"]);
-  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-17", [null], false), ["2026-12-10", "2026-12-17"]);
-  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-16", [null, null], false), ["2026-12-10", "2026-12-13", "2026-12-16"]);
+test("scheduleDates: the last leg flies on the end date and stops spread between", () => {
+  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-17", []), ["2026-12-10"]);
+  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-17", [null]), ["2026-12-10", "2026-12-17"]);
+  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-16", [null, null]), ["2026-12-10", "2026-12-13", "2026-12-16"]);
 });
 
 test("scheduleDates: fixed dates are kept and the rest interpolate around them", () => {
-  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-20", [null, "2026-12-12", null], true),
+  assert.deepEqual(L.scheduleDates("2026-12-10", "2026-12-20", [null, "2026-12-12", null, null]),
     ["2026-12-10", "2026-12-11", "2026-12-12", "2026-12-16", "2026-12-20"]);
 });
 
@@ -91,12 +86,19 @@ test("country filter is respected", () => {
   for (const it of itineraries) assert.notEqual(map[it.codes[1]].country, "US");
 });
 
-test("round trip appends a return flight on the end date", () => {
-  const { itineraries } = L.buildItineraries({ ...base, roundTrip: true, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [] });
+const homeStop = { mode: "fixed", airport: "LHR", date: "" };
+test("returning home ends the trip at the departure airport on the end date", () => {
+  const { itineraries } = L.buildItineraries({ ...base, returnHome: true, depAirports: ["MCO"], stops: [homeStop] });
   const [it] = requested(itineraries);
   assert.deepEqual(it.codes, ["MCO", "LHR", "MCO"]);
   assert.deepEqual(it.legs.map((l) => l.date), ["2026-12-10", "2026-12-17"]);
-  assert.ok(it.legs[1].isReturn);
+  assert.ok(it.legs[1].isReturn && !it.legs[0].isReturn);
+});
+
+test("returning home pairs each alternate departure airport with itself", () => {
+  const its = requested(L.buildItineraries({ ...base, returnHome: true, depAirports: ["MCO", "TPA"], stops: [homeStop] }).itineraries);
+  assert.deepEqual(its.map((i) => i.codes[0] + i.codes.at(-1)).sort(), ["MCOMCO", "TPATPA"]);
+  assert.deepEqual(L.buildItineraries({ ...base, returnHome: true, depAirports: ["MCO"], stops: [] }).itineraries, []);
 });
 
 test("fixed stop with date flies out on that date", () => {
@@ -146,17 +148,26 @@ test("airline and Google links carry passengers, cabin and currency", () => {
 // --- Sharing & export --------------------------------------------------------
 test("state round-trips through the URL and rejects junk", () => {
   const s = { ...L.DEFAULT_STATE, origin: "MCO", destination: "London", depAlts: ["TPA"], arrAlts: [], depart: "2026-12-10", end: "2026-12-20",
-    trip: "oneway", adults: 2, children: 1, infants: 1, cabin: "business", currency: "GBP",
+    returnHome: false, adults: 2, children: 1, infants: 1, cabin: "business", currency: "GBP",
     stops: [{ mode: "fixed", airport: "JFK", date: "2026-12-12", country: "any", continent: "any" }, { mode: "suggest", airport: "", date: "", country: "different", continent: "europe" }] };
   assert.deepEqual(L.parseState(L.serializeState(s)), s);
   const junk = L.parseState("from=MCO&to=X&adults=99&cabin=<script>&cur=XXX&depart=tomorrow&stops=a:b;suggest:evil:mars");
   assert.equal(junk.adults, 1); assert.equal(junk.cabin, "economy"); assert.equal(junk.currency, "USD"); assert.equal(junk.depart, "");
   assert.deepEqual(junk.stops.map((x) => [x.mode, x.airport, x.country, x.continent]), [["fixed", "", "any", "any"], ["suggest", "", "any", "any"]]);
   assert.equal(L.parseState(""), null);
+  const home = { ...s, destination: "", arrAlts: [], returnHome: true };
+  assert.deepEqual(L.parseState(L.serializeState(home)), home);
+});
+
+test("old round-trip links become a stop plus return home", () => {
+  const s = L.parseState("from=MCO&to=LHR&trip=round&depart=2026-12-10&end=2026-12-17&stops=JFK:");
+  assert.equal(s.returnHome, true); assert.equal(s.destination, "");
+  assert.deepEqual(s.stops.map((x) => x.airport), ["JFK", "LHR"]);
+  assert.equal(L.parseState("from=MCO&to=LHR&trip=oneway").returnHome, false);
 });
 
 test("text and calendar exports include every leg", () => {
-  const [it] = requested(L.buildItineraries({ ...base, roundTrip: true, depAirports: ["MCO"], arrAirports: ["LHR"], stops: [] }).itineraries);
+  const [it] = requested(L.buildItineraries({ ...base, returnHome: true, depAirports: ["MCO"], stops: [homeStop] }).itineraries);
   const opts = { cabin: "economy", pax: pax1, currency: "USD" };
   const txt = L.itineraryToText(it, map, opts);
   assert.match(txt, /Leg 1: Orlando \(MCO\) → London \(LHR\)/);

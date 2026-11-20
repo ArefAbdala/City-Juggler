@@ -13,15 +13,13 @@ export const isISODate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.t
 
 /**
  * Fly-out date for every waypoint that has an outgoing flight.
- * Index 0 = origin (depart), 1..n = stops, n+1 = destination (round trip only).
+ * Index 0 = origin (depart), 1..n = stops.
  * Fixed stop dates are kept; the rest are spread evenly between known dates.
- * One way: the last stop flies out on `end` unless it has a fixed date.
+ * The last stop flies out on `end` (the final flight) unless it has a fixed date.
  */
-export function scheduleDates(depart, end, stopDates, roundTrip) {
-  const n = stopDates.length;
-  const last = roundTrip ? n + 1 : n;
+export function scheduleDates(depart, end, stopDates) {
+  const last = stopDates.length;
   const out = [depart, ...stopDates.map((d) => d || null)];
-  if (roundTrip) out.push(end);
   if (last > 0 && !out[last]) out[last] = end;
   for (let k = 1; k < last; k++) {
     if (out[k]) continue;
@@ -295,7 +293,7 @@ const MAX_DATE_SHIFT = 14;
  * than MIN_RESULTS, nearby departure/arrival airports (needs `airports`) and then the whole trip
  * shifted a few days earlier/later (never before `today`) are added. Each such extra has a `note`.
  */
-export function buildItineraries({ map, hubs, airports = [], depAirports, arrAirports, stops, depart, end, roundTrip, cabin, pax, today = null, avoid = [] }) {
+export function buildItineraries({ map, hubs, airports = [], depAirports, arrAirports = [], stops, depart, end, returnHome = false, cabin, pax, today = null, avoid = [] }) {
   const warnings = new Set();
   const hasSuggest = stops.some((s) => s.mode === "suggest");
   const fixedCodes = stops.filter((s) => s.mode === "fixed").map((s) => s.airport);
@@ -303,8 +301,11 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
   const usedStops = new Set(); // cities already shown as a suggested stop in an earlier itinerary
   const best = new Map();
 
+  // returnHome: the final destination is the departure airport (dep → stops → dep).
   function build(dep, arr, shift = 0, note = "") {
-    if (dep === arr || isAvoided(dep) || isAvoided(arr)) return null;
+    if (returnHome) arr = dep;
+    else if (dep === arr) return null;
+    if (isAvoided(dep) || isAvoided(arr)) return null;
     const start = addDays(depart, shift);
     if (today && start < today) return null;
     const originCountry = map[dep].country;
@@ -350,8 +351,9 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
       if (s.code !== prev && s.code !== next) { route.push(s); prev = s.code; }
     });
 
-    const codes = [dep, ...route.map((s) => s.code), arr, ...(roundTrip ? [dep] : [])];
-    const dates = scheduleDates(start, addDays(end, shift), route.map((s) => s.date), roundTrip);
+    if (!route.length && dep === arr) return null;
+    const codes = [dep, ...route.map((s) => s.code), arr];
+    const dates = scheduleDates(start, addDays(end, shift), route.map((s) => s.date));
     const legs = [];
     for (let i = 0; i < codes.length - 1; i++) {
       const to = route[i];
@@ -359,7 +361,7 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
         from: codes[i], to: codes[i + 1], date: dates[i],
         cost: estimateCost(map, codes[i], codes[i + 1], cabin, pax, dates[i]),
         suggested: !!(to && to.suggested), hub: to ? to.hub || null : null,
-        isReturn: roundTrip && i === codes.length - 2,
+        isReturn: returnHome && i === codes.length - 2,
       });
     }
     const totalCost = legs.reduce((sum, l) => sum + (l.cost || 0), 0);
@@ -374,7 +376,7 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
   };
 
   // 1. Requested airports. With suggested stops, go round-robin so every combination gets new stop cities.
-  const combos = depAirports.flatMap((dep) => arrAirports.map((arr) => [dep, arr]));
+  const combos = depAirports.flatMap((dep) => (returnHome ? [dep] : arrAirports).map((arr) => [dep, arr]));
   if (hasSuggest) {
     for (let round = 0; round < MAX_RESULTS && best.size < MAX_RESULTS; round++) {
       let added = false;
@@ -390,7 +392,7 @@ export function buildItineraries({ map, hubs, airports = [], depAirports, arrAir
     for (const n of nearbyAirports(airports, map, base.dep)) {
       if (!tried.has(n.code) && !isAvoided(n.code)) add(build(n.code, base.arr, 0, `Nearby departure airport (${Math.round(n.dist)} km from ${base.dep})`));
     }
-    for (const n of nearbyAirports(airports, map, base.arr)) {
+    if (!returnHome) for (const n of nearbyAirports(airports, map, base.arr)) {
       if (!tried.has(n.code) && !isAvoided(n.code)) add(build(base.dep, n.code, 0, `Nearby arrival airport (${Math.round(n.dist)} km from ${base.arr})`));
     }
   }
@@ -501,19 +503,19 @@ export function airlineLinks(map, from, to, date, cabin, pax) {
 // Sharing: form state <-> URL query string
 // ---------------------------------------------------------------------------
 export const DEFAULT_STATE = {
-  origin: "MCO", destination: "", depAlts: [], arrAlts: [], depart: "", end: "", trip: "round",
+  origin: "MCO", destination: "", depAlts: [], arrAlts: [], depart: "", end: "", returnHome: false,
   adults: 1, children: 0, infants: 0, cabin: "economy", currency: "USD", stops: [], avoid: [],
 };
 export const MAX_AVOID = 10;
 
 export function serializeState(s) {
   const p = new URLSearchParams();
-  p.set("from", s.origin); p.set("to", s.destination);
+  p.set("from", s.origin);
+  if (s.returnHome) p.set("home", "1"); else p.set("to", s.destination);
   if (s.depAlts.length) p.set("fromAlt", s.depAlts.join(","));
-  if (s.arrAlts.length) p.set("toAlt", s.arrAlts.join(","));
+  if (!s.returnHome && s.arrAlts.length) p.set("toAlt", s.arrAlts.join(","));
   if (s.depart) p.set("depart", s.depart);
   if (s.end) p.set("end", s.end);
-  p.set("trip", s.trip);
   p.set("adults", s.adults);
   if (s.children) p.set("children", s.children);
   if (s.infants) p.set("infants", s.infants);
@@ -537,13 +539,20 @@ export function parseState(query) {
     if (a === "suggest") return { mode: "suggest", airport: "", date: "", country: ["any", "same", "different"].includes(b) ? b : "any", continent: CONTINENT_KEYS.includes(c) ? c : "any" };
     return { mode: "fixed", airport: code3(a), date: isISODate(b) ? b : "", country: "any", continent: "any" };
   });
+  let returnHome = p.get("home") === "1", destination = (p.get("to") || "").slice(0, 60);
+  // Links from before the trip-type toggle was removed: a round trip A → … → B → A becomes
+  // A → … → B (as a stop) → A, which schedules the same flights.
+  if (p.get("trip") === "round" && !returnHome && stops.length < 4) {
+    stops.push({ mode: "fixed", airport: code3(destination) || destination, date: "", country: "any", continent: "any" });
+    returnHome = true;
+  }
+  if (returnHome) destination = "";
   const adults = intIn(p.get("adults"), 1, 9, 1);
   return {
     ...DEFAULT_STATE,
-    origin: (p.get("from") || "").slice(0, 60), destination: (p.get("to") || "").slice(0, 60),
-    depAlts: list("fromAlt"), arrAlts: list("toAlt"),
+    origin: (p.get("from") || "").slice(0, 60), destination, returnHome,
+    depAlts: list("fromAlt"), arrAlts: returnHome ? [] : list("toAlt"),
     depart: isISODate(p.get("depart")) ? p.get("depart") : "", end: isISODate(p.get("end")) ? p.get("end") : "",
-    trip: p.get("trip") === "oneway" ? "oneway" : "round",
     adults, children: intIn(p.get("children"), 0, 8, 0), infants: Math.min(adults, intIn(p.get("infants"), 0, 9, 0)),
     cabin: CABIN_MULT[p.get("cabin")] ? p.get("cabin") : "economy",
     currency: CURRENCIES[p.get("cur")] ? p.get("cur") : "USD",
