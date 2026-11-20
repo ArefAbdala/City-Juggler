@@ -54,6 +54,14 @@ npm run check-links   # pings each airline deep link; run occasionally, needs in
 
 Airline sites often block automated requests or change their URL formats. `check-links` flags links that look broken; confirm them in a browser and update the builder in `js/lib.js` (`AIRLINES`).
 
+### Check every change on mobile
+
+All changes to files must be checked in the mobile version as well as on desktop. Before committing, open the page at phone width (e.g. 375px wide, using your browser's device toolbar or a real phone) and confirm that:
+
+- The layout fits with no horizontal scrolling and nothing is cut off or overlapping
+- Tap targets stay at least 44px and form fields don't trigger zoom-on-focus
+- New or changed controls, results and messages work and read well on a small screen
+
 ## Deployment
 
 This is a static site. Deploy to any static host:
