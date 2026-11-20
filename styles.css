@@ -129,6 +129,23 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .tag.best { color: var(--good); }
 .tag.cheapest { color: var(--good); background: rgba(19, 122, 67, 0.1); border-color: var(--good); }
 
+.bar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.itin-details > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-top: 1px solid var(--line); min-height: 44px; box-sizing: border-box; }
+.itin-details > summary::-webkit-details-marker { display: none; }
+.itin-details > summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg); transition: transform .15s; flex: none; margin-right: 2px; }
+.itin-details[open] > summary::before { transform: rotate(45deg); }
+.itin-details > summary:hover { background: var(--accent-light); }
+.itin-details > summary:focus-visible { outline-offset: -2px; }
+.itin-details-title { color: var(--accent); font-weight: 600; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .itin-details > summary::before { transition: none; } }
+.itin-leg-airports { margin: 8px 0 0; display: grid; gap: 4px; font-size: 13px; }
+.itin-leg-airports > div { display: flex; gap: 8px; min-width: 0; }
+.itin-leg-airports dt { color: var(--muted); font-weight: 600; flex: 0 0 40px; }
+.itin-leg-airports dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.itin-leg-airports .ap-place { color: var(--muted); }
+.itin-leg-airports .ap-place::before { content: "— "; }
 .itin-leg { padding: 12px 16px; border-top: 1px solid var(--line); }
 .itin-leg-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
 .itin-leg-label .suggested-tag { color: var(--accent); font-style: italic; text-transform: none; letter-spacing: 0; }
@@ -215,6 +232,10 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   .itin-header { padding: 12px 14px; }
   .itin-route { font-size: 16px; }
   .itin-leg { padding: 12px 14px; }
+  .itin-details > summary { padding: 10px 14px; }
+  .bar-actions { width: 100%; }
+  .itin-leg-airports .ap-place { display: block; }
+  .itin-leg-airports .ap-place::before { content: none; }
   .itin-leg-route { font-size: 15px; }
   .book-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .book-link { justify-content: center; text-align: center; min-height: 44px; padding: 8px 10px; }

@@ -279,6 +279,24 @@
     return Math.round(seat * pax.adults);
   }
 
+  /**
+   * Rough flying time in minutes: ~30 min for taxi, climb and descent plus cruise at ~800 km/h
+   * over the great-circle distance with 10% added for real-world routing. Rounded to 5 minutes.
+   * Real schedules vary with winds and routing, so this is a guide only.
+   */
+  function estimateFlightMinutes(map, from, to) {
+    if (!map[from] || !map[to]) return null;
+    const minutes = 30 + (dist(map, from, to) * 1.1 / 800) * 60;
+    return Math.max(30, Math.round(minutes / 5) * 5);
+  }
+
+  /** 485 → "8h 05m", 45 → "45m". */
+  function formatDuration(min) {
+    if (min == null || !isFinite(min)) return "";
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+  }
+
   // Approximate, fixed exchange rates (USD base). Estimates only.
   const CURRENCIES = { USD: 1, EUR: 0.92, GBP: 0.79, CAD: 1.38, AUD: 1.52, MXN: 18, JPY: 150, INR: 84, AED: 3.67 };
   function formatMoney(usd, currency = "USD") {
@@ -584,7 +602,7 @@
     const lines = [`Trip: ${itin.codes.map((c) => airportLabel(map, c)).join(" → ")}`, ...(itin.note ? [itin.note] : []),
       `Estimated total: ~${formatMoney(itin.totalCost, currency)} (${paxPhrase(pax)}, ${cabin.replace("-", " ")})`, ""];
     itin.legs.forEach((l, i) => {
-      lines.push(`Leg ${i + 1}${l.isReturn ? " (return)" : ""}: ${airportLabel(map, l.from)} → ${airportLabel(map, l.to)} — ${formatDate(l.date)} — ~${formatMoney(l.cost || 0, currency)}`);
+      lines.push(`Leg ${i + 1}${l.isReturn ? " (return)" : ""}: ${airportLabel(map, l.from)} → ${airportLabel(map, l.to)} — ${formatDate(l.date)} — ~${formatDuration(estimateFlightMinutes(map, l.from, l.to))} flight — ~${formatMoney(l.cost || 0, currency)}`);
       lines.push(`  Search: ${googleFlightsUrl(l.from, l.to, l.date, cabin, pax, currency)}`);
     });
     lines.push("", "Estimates are approximate. Each leg is booked separately.");
@@ -644,6 +662,8 @@
     CABIN_MULT,
     DOW_FACTOR,
     estimateCost,
+    estimateFlightMinutes,
+    formatDuration,
     CURRENCIES,
     formatMoney,
     MIN_RESULTS,

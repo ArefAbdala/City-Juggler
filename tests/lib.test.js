@@ -305,3 +305,21 @@ test("parseState ignores prototype keys as cabin or currency", () => {
   assert.equal(s.currency, "USD");
   assert.equal(s.cabin, "economy");
 });
+
+// --- Flight duration --------------------------------------------------------
+test("duration: estimates flying time from distance, rounded to 5 minutes", () => {
+  const lhrJfk = L.estimateFlightMinutes(map, "LHR", "JFK");
+  assert.ok(lhrJfk >= 420 && lhrJfk <= 540, `LHR-JFK ${lhrJfk}min`);
+  assert.equal(lhrJfk % 5, 0);
+  const lhrCdg = L.estimateFlightMinutes(map, "LHR", "CDG");
+  assert.ok(lhrCdg >= 45 && lhrCdg <= 90, `LHR-CDG ${lhrCdg}min`);
+  assert.ok(L.estimateFlightMinutes(map, "LHR", "SYD") > lhrJfk);
+  assert.equal(L.estimateFlightMinutes(map, "LHR", "???"), null);
+});
+
+test("duration: formats hours and minutes", () => {
+  assert.equal(L.formatDuration(485), "8h 05m");
+  assert.equal(L.formatDuration(45), "45m");
+  assert.equal(L.formatDuration(120), "2h 00m");
+  assert.equal(L.formatDuration(null), "");
+});

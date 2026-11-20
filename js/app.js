@@ -6,6 +6,7 @@ const {
   todayISO, addDays, validateStopDates, indexAirports, searchAirports, resolveAirport, airportLabel,
   buildItineraries, googleFlightsUrl, airlineLinks, formatMoney, formatDate, CURRENCIES, CONTINENTS,
   serializeState, parseState, itineraryToText, itineraryToICS,
+  estimateFlightMinutes, formatDuration, countryName, dist,
   countryList, searchPlaces, resolvePlace, avoidChecker, avoidLabel, MAX_AVOID,
 } = globalThis.PlanMyTrip;
 
@@ -375,6 +376,22 @@ function plan() {
 // ---------------------------------------------------------------------------
 // Results
 // ---------------------------------------------------------------------------
+/** "Heathrow Airport — London, United Kingdom" (HTML-escaped). */
+function airportDetail(code) {
+  const a = airportMap[code];
+  if (!a) return esc(code);
+  return `<span class="ap-name">${esc(a.name)} (${esc(a.iata)})</span> <span class="ap-place">${esc(a.city)}, ${esc(countryName(a.country))}</span>`;
+}
+
+function syncToggleAll() {
+  const btn = $("results").querySelector('[data-action="toggle-all"]');
+  if (!btn) return;
+  const all = [...$("results").querySelectorAll(".itin-details")];
+  btn.textContent = all.length && all.every((d) => d.open) ? "Collapse all" : "Expand all";
+}
+// "toggle" doesn't bubble, so listen in the capture phase.
+$("results").addEventListener("toggle", (e) => { if (e.target.classList?.contains("itin-details")) syncToggleAll(); }, true);
+
 function renderItineraries(itineraries, opts) {
   lastResults = { itineraries, opts };
   if (!itineraries.length) {
@@ -386,13 +403,18 @@ function renderItineraries(itineraries, opts) {
     <div class="meta">${itineraries.length} itinerar${itineraries.length === 1 ? "y" : "ies"} found · cheapest first${
       itineraries.some((it) => it.legs.some((l) => l.suggested)) ? " · each with different stopover cities" : ""}${
       opts.avoid && opts.avoid.length ? `<br>Avoiding: ${esc(opts.avoid.map((x) => avoidLabel(airportMap, airports, x)).join(", "))}` : ""}</div>
-    <button type="button" class="ghost-btn" data-action="share">Copy link to this search</button>
+    <div class="bar-actions">
+      <button type="button" class="ghost-btn" data-action="toggle-all" aria-controls="results">Expand all</button>
+      <button type="button" class="ghost-btn" data-action="share">Copy link to this search</button>
+    </div>
   </div>`;
 
   itineraries.forEach((itin, idx) => {
     const cheapest = idx === 0 && itineraries.length > 1;
     const routeStr = itin.codes.map((c) => airportLabel(airportMap, c)).join(" → ");
     const first = itin.legs[0].date, last = itin.legs[itin.legs.length - 1].date;
+    const legMins = itin.legs.map((l) => estimateFlightMinutes(airportMap, l.from, l.to));
+    const totalMins = legMins.every((m) => m != null) ? legMins.reduce((a, b) => a + b, 0) : null;
     html += `<article class="itin-card${cheapest ? " best-card" : ""}" aria-label="Itinerary ${idx + 1}">
       <div class="itin-header">
         <div>
@@ -401,7 +423,10 @@ function renderItineraries(itineraries, opts) {
           <div class="sub">${esc(formatDate(first))}${first !== last ? ` – ${esc(formatDate(last))}` : ""} · ${itin.legs.length} flight${itin.legs.length > 1 ? "s" : ""}</div>
         </div>
         <div class="itin-total-cost">~${esc(formatMoney(itin.totalCost, currency))}</div>
-      </div>`;
+      </div>
+      <details class="itin-details"${idx === 0 ? " open" : ""}>
+        <summary><span class="itin-details-title">Flight details</span><span class="sub">${itin.legs.length} flight${itin.legs.length > 1 ? "s" : ""}${
+          totalMins != null ? ` · ~${esc(formatDuration(totalMins))} flying` : ""}</span></summary>`;
 
     itin.legs.forEach((leg, i) => {
       const tag = leg.isReturn ? ` <span class="suggested-tag">— Return home</span>`
@@ -412,7 +437,12 @@ function renderItineraries(itineraries, opts) {
       html += `<div class="itin-leg">
         <div class="itin-leg-label">Flight ${i + 1}${tag}</div>
         <div class="itin-leg-route">${esc(airportLabel(airportMap, leg.from))} → ${esc(airportLabel(airportMap, leg.to))}</div>
-        <div class="itin-leg-date">${esc(formatDate(leg.date))}</div>
+        <div class="itin-leg-date">${esc(formatDate(leg.date))}${legMins[i] != null
+          ? ` · ~${esc(formatDuration(legMins[i]))} flight · ${esc(Math.round(dist(airportMap, leg.from, leg.to)).toLocaleString("en-US"))} km` : ""}</div>
+        <dl class="itin-leg-airports">
+          <div><dt>From</dt><dd>${airportDetail(leg.from)}</dd></div>
+          <div><dt>To</dt><dd>${airportDetail(leg.to)}</dd></div>
+        </dl>
         <div class="itin-leg-cost">~${esc(formatMoney(leg.cost || 0, currency))} estimated</div>
         <div class="book-links">
           <a class="book-link gf" href="${esc(googleFlightsUrl(leg.from, leg.to, leg.date, cabin, pax, currency))}" target="_blank" rel="noopener noreferrer">Google Flights ${extIcon}</a>
@@ -422,7 +452,8 @@ function renderItineraries(itineraries, opts) {
       </div>`;
     });
 
-    html += `<div class="itin-footer">
+    html += `</details>
+      <div class="itin-footer">
         <div class="itin-actions">
           <button type="button" class="ghost-btn" data-action="copy" data-idx="${idx}">Copy as text</button>
           <button type="button" class="ghost-btn" data-action="ics" data-idx="${idx}">Add to calendar (.ics)</button>
@@ -431,6 +462,7 @@ function renderItineraries(itineraries, opts) {
       </div></article>`;
   });
   $("results").innerHTML = html;
+  syncToggleAll();
 }
 
 async function copyText(text) {
@@ -452,7 +484,12 @@ $("results").addEventListener("click", async (e) => {
   if (!btn || !lastResults) return;
   const { itineraries, opts } = lastResults;
   const itin = itineraries[+btn.dataset.idx];
-  if (btn.dataset.action === "share") {
+  if (btn.dataset.action === "toggle-all") {
+    const all = [...$("results").querySelectorAll(".itin-details")];
+    const open = !all.every((d) => d.open);
+    all.forEach((d) => { d.open = open; });
+    syncToggleAll();
+  } else if (btn.dataset.action === "share") {
     if (navigator.share && matchMedia("(pointer: coarse)").matches) {
       try { await navigator.share({ title: "Plan My Trip", url: location.href }); return; } catch { /* cancelled: fall through to copy */ }
     }
