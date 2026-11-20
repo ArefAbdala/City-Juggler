@@ -278,6 +278,7 @@ test("places to avoid: search, resolve, label and URL state", () => {
 test("avoid box: a partial country name resolves like the autocomplete suggests", () => {
   const countries = L.countryList(airports);
   assert.equal(L.resolvePlace(map, airports, countries, "Germ"), "DE");
+  assert.equal(L.searchPlaces(countries, airports, "Ger")[0].value, "DE"); // not Algeria/Nigeria
   assert.equal(L.resolvePlace(map, airports, countries, "Paris"), "CDG"); // airports still win
   assert.equal(L.resolvePlace(map, airports, countries, "Par"), "PY"); // same as the first suggestion
   assert.equal(L.resolvePlace(map, airports, countries, "Zz"), null);

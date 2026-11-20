@@ -136,6 +136,10 @@
     if (!q) return [];
     const cs = countries
       .filter((c) => c.code === q || c.name.toUpperCase().startsWith(q) || (q.length >= 3 && c.name.toUpperCase().includes(q)))
+      // Exact code, then names starting with the text ("Ger" → Germany before Algeria/Nigeria)
+      .map((c) => [c.code === q ? 0 : c.name.toUpperCase().startsWith(q) ? 1 : 2, c])
+      .sort((x, y) => x[0] - y[0])
+      .map((x) => x[1])
       .slice(0, 3)
       .map((c) => ({ value: c.code, code: c.code, detail: `${c.name} — whole country` }));
     const as = searchAirports(airports, query, limit - cs.length, preferred)
