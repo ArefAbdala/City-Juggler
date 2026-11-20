@@ -205,8 +205,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
   .avoid-row .field { max-width: none; }
   .avoid-row .ghost-btn { flex: 0 0 auto; min-width: 72px; }
-  .chip { min-height: 36px; font-size: 14px; }
-  .chip-remove { width: 36px; height: 36px; font-size: 20px; }
+  .chip { min-height: 44px; font-size: 14px; padding: 0 2px 0 14px; }
+  .chip-remove { width: 44px; height: 44px; font-size: 22px; }
 
   .ac-list { max-height: 50vh; }
   .ac-item { padding: 12px; font-size: 15px; }
