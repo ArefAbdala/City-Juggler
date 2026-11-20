@@ -151,6 +151,31 @@ test("airline and Google links carry passengers, cabin and currency", () => {
   assert.match(gf, /curr=EUR/);
 });
 
+test("cost estimates sit near real one-way fares", () => {
+  // Lowest one-way economy fares published on airline websites (USD, Nov 2026).
+  const real = { "LAX-SFO": [55, 130], "ORD-DEN": [55, 135], "LHR-BCN": [20, 60], "DEL-BOM": [55, 90], "MEX-CUN": [45, 80],
+    "YYZ-YVR": [120, 165], "JFK-LAX": [165, 200], "DXB-BKK": [230, 470], "JFK-LHR": [250, 400], "SIN-SYD": [180, 290], "JFK-NRT": [450, 900] };
+  for (const [route, [lo, hi]] of Object.entries(real)) {
+    const [o, d] = route.split("-");
+    const est = L.estimateCost(map, o, d, "economy", pax1);
+    assert.ok(est >= lo && est <= hi, `${route}: estimate ${est} outside ${lo}-${hi}`);
+  }
+});
+
+test("likely cheapest airline prefers low-cost carriers that fly the route", () => {
+  const cheap = (o, d, c) => L.cheapestAirline(map, o, d, c)?.key;
+  assert.equal(cheap("STN", "DUB"), "ryanair");
+  assert.notEqual(cheap("LHR", "CDG"), "ryanair"); // Ryanair doesn't fly Heathrow
+  assert.equal(cheap("ORD", "DEN"), "frontier");
+  assert.equal(cheap("YYZ", "YVR"), "flair");
+  assert.equal(cheap("MEX", "CUN"), "volaris");
+  assert.equal(cheap("SIN", "SYD"), "scoot");
+  assert.equal(cheap("KUL", "BKK"), "airasia");
+  assert.equal(L.cheapestAirline(map, "ORD", "DEN", "business").tier, 2); // full-service for business
+  const link = L.cheapestAirlineLink(map, "STN", "DUB", "2026-12-10", "economy", { adults: 2 });
+  assert.match(link.url, /^https:\/\/www\.ryanair\.com\/.*adults=2.*dateOut=2026-12-10.*originIata=STN&destinationIata=DUB/);
+});
+
 // --- Sharing & export --------------------------------------------------------
 test("state round-trips through the URL and rejects junk", () => {
   const s = { ...L.DEFAULT_STATE, origin: "MCO", destination: "London", depAlts: ["TPA"], arrAlts: [], depart: "2026-12-10", end: "2026-12-20",

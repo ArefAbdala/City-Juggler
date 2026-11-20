@@ -157,7 +157,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .book-link { display: inline-flex; align-items: center; gap: 5px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none; transition: background .15s, border-color .15s; }
 .book-link:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .book-link svg { width: 14px; height: 14px; }
-.book-link.gf { border-color: var(--accent); background: var(--accent-light); }
+.book-link.gf, .book-link.cheap { border-color: var(--accent); background: var(--accent-light); }
 
 .more-airlines { margin-top: 8px; }
 .more-airlines summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; padding: 6px 0; width: max-content; }
@@ -239,7 +239,7 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   .itin-leg-route { font-size: 15px; }
   .book-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .book-link { justify-content: center; text-align: center; min-height: 44px; padding: 8px 10px; }
-  .book-link.gf { grid-column: 1 / -1; font-size: 14px; }
+  .book-link.gf, .book-link.cheap { grid-column: 1 / -1; font-size: 14px; }
   .itin-footer { padding: 10px 14px; }
 }
 
