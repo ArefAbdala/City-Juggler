@@ -8,6 +8,18 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Cross-Origin-Opener-Policy: same-origin
 
+# Caching: icons and images rarely change; code and styles revalidate hourly so updates appear quickly
+/*.svg
+  Cache-Control: public, max-age=604800
+/*.png
+  Cache-Control: public, max-age=604800
+/*.jpg
+  Cache-Control: public, max-age=604800
+/js/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+/styles.css
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+
 # Keep preview/branch deployments (e.g. abc123.plan-my-trip.pages.dev) out of Google
 https://:version.plan-my-trip.pages.dev/*
   X-Robots-Tag: noindex

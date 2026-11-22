@@ -52,6 +52,7 @@ Tests use Node's built-in test runner (Node 18+), no dependencies:
 
 ```sh
 npm test              # unit tests for js/lib.js
+npm run build-pages   # regenerates routes/ and sitemap.xml after data changes
 npm run check-links   # pings each airline deep link; run occasionally, needs internet
 ```
 
@@ -80,6 +81,9 @@ This is a static site. Deploy to any static host:
 ### Search engines & security
 
 - **Indexing**: `index.html` has a canonical URL, description, Open Graph/Twitter tags and `WebApplication` structured data; `robots.txt` points to `sitemap.xml`. Search links (`?…`) all canonicalise to the home page. If the site moves to its own domain, replace `https://plan-my-trip.pages.dev` in `index.html`, `robots.txt`, `sitemap.xml` and `_headers`.
+- **Stopover route guides** (`routes/`): 80 static pages such as `/routes/london-to-sydney/`, each targeting searches like "London to Sydney stopover". They list the hub cities that split the trip (each leg at least a quarter of the distance) with the least extra distance, with flying times, fare estimates and links that open the planner pre-filled. `routes/index.html` links them all, and the home page links to it. They are generated from the app's own data by `npm run build-pages` (`scripts/build-pages.js`), which also rewrites `sitemap.xml`. The output is committed because the host has no build step, so **re-run it after changing airports, hubs, fares or the route list** (`ROUTES` in the script), and don't hand-edit `routes/` or `sitemap.xml`.
+- **Titles and descriptions** are kept under ~65 and ~160 characters so Google shows them in full.
+- **Caching** (`_headers`): images and icons are cached for a week; JS and CSS revalidate hourly, since their filenames don't change between versions.
 - **404 page**: `404.html` makes unknown paths return a real 404 (without it Cloudflare Pages serves the home page for every URL, which Google reports as soft 404s).
 - **Preview deployments** (`<hash>.plan-my-trip.pages.dev`) send `X-Robots-Tag: noindex` so only the production URL is indexed.
 - **Security headers** (`_headers`): a strict Content-Security-Policy (`'self'` only — no inline scripts or `style="…"` attributes, so keep JS and CSS in their files; JSON-LD is fine because it isn't executed), HSTS, `nosniff`, no framing, a strict referrer policy and a Permissions-Policy that turns off camera, microphone, location and payments. If you add a third-party script, font or API, add its origin to the CSP.
@@ -92,7 +96,9 @@ This is a static site. Deploy to any static host:
 | `index.html` | Page markup, SEO metadata and the crawlable "about" section |
 | `404.html` | Not-found page |
 | `_headers` | Cloudflare Pages security and indexing headers |
-| `robots.txt`, `sitemap.xml` | Crawler rules and sitemap |
+| `robots.txt`, `sitemap.xml` | Crawler rules and sitemap (generated) |
+| `routes/` | Generated stopover route guides (`npm run build-pages`) |
+| `scripts/build-pages.js` | Generates `routes/` and `sitemap.xml` |
 | `favicon.svg`, `apple-touch-icon.png`, `icon-512.png`, `site.webmanifest` | Icons and web app manifest |
 | `og-image.jpg` | 1200×630 preview image for search and social shares |
 | `styles.css` | All styles, including the mobile layout |

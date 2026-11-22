@@ -258,3 +258,41 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
 .not-found { text-align: center; padding: 60px 0; }
 .not-found a { color: var(--accent); }
+
+/* Static guide pages (routes/) */
+.site-name { margin: 0; font-size: 20px; font-weight: 700; }
+.site-name a { color: var(--ink); text-decoration: none; }
+.guide { line-height: 1.6; }
+.guide a { color: var(--accent); }
+.guide h1 { font-size: 28px; line-height: 1.2; margin: 8px 0 12px; letter-spacing: -0.01em; }
+.guide h2 { font-size: 20px; margin: 28px 0 8px; }
+.guide .lead { font-size: 16px; }
+.guide th .sub { display: block; font-weight: 400; }
+.crumbs ol { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px; font-size: 13px; color: var(--muted); }
+.crumbs li + li::before { content: "›"; margin-right: 4px; }
+.cta-row { margin: 18px 0; }
+.guide .cta { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 18px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none; }
+.guide .cta:hover { filter: brightness(1.08); }
+.table-wrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.guide table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.guide th, .guide td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.guide thead th { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.guide tbody tr:last-child > * { border-bottom: none; }
+.guide td a { display: inline-block; padding: 2px 0; white-space: nowrap; }
+.link-list { padding-left: 20px; }
+.link-list li { margin: 6px 0; }
+.link-list a { display: inline-block; min-height: 24px; }
+.about .more { margin-top: 12px; }
+.about a { color: var(--accent); }
+@media (max-width: 600px) {
+  .guide h1 { font-size: 24px; }
+  .guide table, .guide thead, .guide tbody, .guide tr, .guide th, .guide td { display: block; }
+  .guide thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .guide tbody tr { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .guide tbody tr:last-child { border-bottom: none; }
+  .guide tbody th, .guide tbody td { padding: 2px 0; border: none; }
+  .guide tbody td:nth-of-type(1)::before { content: "Extra distance: "; color: var(--muted); }
+  .guide tbody td:nth-of-type(2)::before { content: "Flying time: "; color: var(--muted); }
+  .guide tbody td:nth-of-type(3)::before { content: "Est. fare from: "; color: var(--muted); }
+  .guide td a { min-height: 44px; display: inline-flex; align-items: center; }
+}

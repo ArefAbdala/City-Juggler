@@ -348,3 +348,14 @@ test("duration: formats hours and minutes", () => {
   assert.equal(L.formatDuration(120), "2h 00m");
   assert.equal(L.formatDuration(null), "");
 });
+
+// --- Generated SEO pages ---------------------------------------------------
+test("sitemap lists every generated route page and nothing missing", async () => {
+  const { readFileSync, readdirSync, existsSync } = await import("node:fs");
+  const root = new URL("..", import.meta.url);
+  const sitemap = readFileSync(new URL("sitemap.xml", root), "utf8");
+  const listed = [...sitemap.matchAll(/<loc>https:\/\/plan-my-trip\.pages\.dev\/routes\/([^/<]+)\/<\/loc>/g)].map((m) => m[1]).sort();
+  const dirs = readdirSync(new URL("routes/", root), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  assert.deepEqual(listed, dirs, "run `npm run build-pages`");
+  for (const d of dirs) assert.ok(existsSync(new URL(`routes/${d}/index.html`, root)));
+});
