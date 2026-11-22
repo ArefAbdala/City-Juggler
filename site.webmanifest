@@ -1,0 +1,13 @@
+{
+  "name": "Plan My Trip",
+  "short_name": "Plan My Trip",
+  "description": "Multi-stop itinerary and stopover planner.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#1f5fd6",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

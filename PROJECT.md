@@ -75,13 +75,26 @@ This is a static site. Deploy to any static host:
 - Build output directory: `/` (root)
 - Deploy
 
-**Or any static host:** Just serve the root directory.
+**Or any static host:** Just serve the root directory. `_headers` is Cloudflare Pages syntax; on another host, set the same headers in its own config.
+
+### Search engines & security
+
+- **Indexing**: `index.html` has a canonical URL, description, Open Graph/Twitter tags and `WebApplication` structured data; `robots.txt` points to `sitemap.xml`. Search links (`?…`) all canonicalise to the home page. If the site moves to its own domain, replace `https://plan-my-trip.pages.dev` in `index.html`, `robots.txt`, `sitemap.xml` and `_headers`.
+- **404 page**: `404.html` makes unknown paths return a real 404 (without it Cloudflare Pages serves the home page for every URL, which Google reports as soft 404s).
+- **Preview deployments** (`<hash>.plan-my-trip.pages.dev`) send `X-Robots-Tag: noindex` so only the production URL is indexed.
+- **Security headers** (`_headers`): a strict Content-Security-Policy (`'self'` only — no inline scripts or `style="…"` attributes, so keep JS and CSS in their files; JSON-LD is fine because it isn't executed), HSTS, `nosniff`, no framing, a strict referrer policy and a Permissions-Policy that turns off camera, microphone, location and payments. If you add a third-party script, font or API, add its origin to the CSP.
+- **Google Search Console**: add the site as a URL-prefix property (`https://plan-my-trip.pages.dev/`), verify with the HTML-tag method (paste the `google-site-verification` meta tag into `<head>`) or by uploading Google's verification file to the repo root, then submit `sitemap.xml` and use URL Inspection → Request indexing.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `index.html` | Page markup |
+| `index.html` | Page markup, SEO metadata and the crawlable "about" section |
+| `404.html` | Not-found page |
+| `_headers` | Cloudflare Pages security and indexing headers |
+| `robots.txt`, `sitemap.xml` | Crawler rules and sitemap |
+| `favicon.svg`, `apple-touch-icon.png`, `icon-512.png`, `site.webmanifest` | Icons and web app manifest |
+| `og-image.jpg` | 1200×630 preview image for search and social shares |
 | `styles.css` | All styles, including the mobile layout |
 | `js/lib.js` | Pure logic (no DOM), exposed as `globalThis.PlanMyTrip`: airport search, scheduling, hub suggestions, cost estimates, booking links, URL state, text/ICS export |
 | `js/app.js` | UI: form, autocomplete, rendering, sharing, local storage |

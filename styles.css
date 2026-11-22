@@ -248,3 +248,13 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   .grid-options { grid-template-columns: 1fr; }
   .stop-fields { flex-direction: column; align-items: stretch; }
 }
+
+.about { margin-top: 32px; }
+.about h2 { font-size: 18px; margin: 0 0 8px; }
+.about p { margin: 0 0 10px; color: var(--muted); }
+.about details { border-top: 1px solid var(--line); padding: 4px 0; }
+.about summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }
+.about details p { margin-top: 4px; }
+
+.not-found { text-align: center; padding: 60px 0; }
+.not-found a { color: var(--accent); }
