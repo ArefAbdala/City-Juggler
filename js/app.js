@@ -48,15 +48,14 @@ $("depart").addEventListener("change", () => {
 });
 
 const returnHome = () => $("return-home").checked;
-const endUsed = () => returnHome() || stops.length > 0;
 
 function updateDateFields() {
   const home = returnHome();
   $("end-label").textContent = home ? "Return" : "Arrive by";
-  $("end-field").hidden = !endUsed();
   $("date-hint").textContent = home
     ? "You'll fly home from your last city stop on the return date."
-    : stops.length ? "Your last flight (from your final stop to your destination) is on the “Arrive by” date." : "";
+    : stops.length ? "Your last flight (from your final stop to your destination) is on the “Arrive by” date."
+    : "With no stops it's one flight on your departure date. Add a stop to spend the days until “Arrive by” somewhere on the way.";
 }
 
 function updateReturnHome() {
@@ -275,7 +274,7 @@ function readState() {
     origin: $("origin").value.trim(), destination: $("destination").value.trim(),
     depAlts: depAlts.map((a) => a.trim()).filter(Boolean), arrAlts: arrAlts.map((a) => a.trim()).filter(Boolean),
     returnHome: returnHome(),
-    depart: $("depart").value, end: endUsed() ? $("ret").value : "",
+    depart: $("depart").value, end: $("ret").value,
     adults: +$("adults").value,
     cabin: $("seat").value, currency: $("currency").value,
     stops: stops.map((s) => ({ ...s })),
@@ -326,10 +325,8 @@ function plan() {
 
   if (!s.depart) errors.push("Please choose a departure date.");
   else if (s.depart < today) errors.push("Departure date can't be in the past.");
-  if (endUsed()) {
-    if (!s.end) errors.push(`Please choose ${s.returnHome ? "a return" : "an “arrive by”"} date.`);
-    else if (s.depart && s.end < s.depart) errors.push(`${s.returnHome ? "Return" : "“Arrive by”"} date must be on or after the departure date.`);
-  }
+  if (!s.end) errors.push(`Please choose ${s.returnHome ? "a return" : "an “arrive by”"} date.`);
+  else if (s.depart && s.end < s.depart) errors.push(`${s.returnHome ? "Return" : "“Arrive by”"} date must be on or after the departure date.`);
   if (s.returnHome && !s.stops.some((st) => st.mode === "fixed")) errors.push("Since you're returning to where you started, add at least one city stop with “I know where” — that's where you're travelling to.");
   if (origin && dest && origin === dest) errors.push("Departure and arrival airports must be different. If you're coming back home, tick “My final destination is the same as where I'm departing from”.");
   // Drop unknown entries (e.g. from an edited shared link).
@@ -340,7 +337,7 @@ function plan() {
   clash(origin, "departure"); clash(dest, "arrival");
   depA.forEach((c) => clash(c, "alternate departure")); arrA.forEach((c) => clash(c, "alternate arrival"));
   stopCodes.forEach((c, i) => clash(c, `stop ${i + 1}`));
-  const dateErr = s.depart && validateStopDates(s.depart, s.end, s.stops.map((st) => (st.mode === "fixed" ? st.date : "")), endUsed());
+  const dateErr = s.depart && validateStopDates(s.depart, s.end, s.stops.map((st) => (st.mode === "fixed" ? st.date : "")), true);
   if (dateErr) errors.push(dateErr);
 
   if (errors.length) { showBanner(errors); $("banner").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
