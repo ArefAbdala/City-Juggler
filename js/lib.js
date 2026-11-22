@@ -56,18 +56,53 @@
     return map;
   }
 
-  /** Best matches first; within equal matches, `preferred` codes (major hubs) come first. */
-  function searchAirports(list, query, limit = 8, preferred = new Set()) {
-    const q = (query || "").trim().toUpperCase();
+  /**
+   * Text for matching: no accents, case or punctuation, so "Sao Paulo" finds "São Paulo",
+   * "St Louis" and "Saint Louis" find "St. Louis", and "Zurich" finds "Zürich".
+   */
+  function normText(s) {
+    return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
+      .replace(/[.'’]/g, "").replace(/[-–—/,]+/g, " ").replace(/\bSAINT\b/g, "ST").replace(/\bSAINTE\b/g, "STE")
+      .replace(/\s+/g, " ").trim();
+  }
+  const normCache = new WeakMap();
+  const normOf = (a) => {
+    let n = normCache.get(a);
+    if (!n) { n = { city: normText(a.city), name: normText(a.name) }; normCache.set(a, n); }
+    return n;
+  };
+
+  // Metropolitan-area codes people type that aren't airports themselves: resolved to the main
+  // airport of that city. Only used when no airport in the data has that code.
+  const METRO_CODES = {
+    NYC: "JFK", LON: "LHR", PAR: "CDG", TYO: "HND", CHI: "ORD", WAS: "IAD", MIL: "MXP", ROM: "FCO",
+    STO: "ARN", MOW: "SVO", BUE: "EZE", RIO: "GIG", SAO: "GRU", OSA: "KIX", SEL: "ICN", YTO: "YYZ",
+    YMQ: "YUL", BJS: "PEK", JKT: "CGK", DTT: "DTW", YEA: "YEG",
+  };
+  const mapCache = new WeakMap();
+  const mapFor = (list) => { let m = mapCache.get(list); if (!m) { m = indexAirports(list); mapCache.set(list, m); } return m; };
+  const metroAirport = (map, code) => (!map || map[code] ? null : (METRO_CODES[code] && map[METRO_CODES[code]] ? METRO_CODES[code] : null));
+
+  /**
+   * Best matches first; within equal matches, `preferred` codes (major hubs) come first.
+   * A typed city name that is also some airport's code ("Goa" = Genoa's code, "Sal") lists the
+   * city first; typed in capitals ("GOA") it's treated as the code.
+   */
+  function searchAirports(list, query, limit = 8, preferred = new Set(), map = null) {
+    const raw = (query || "").trim();
+    const q = normText(raw), code = raw.toUpperCase();
     if (!q) return [];
+    const codeFirst = raw === code;
+    const metro = /^[A-Z]{3}$/.test(code) ? metroAirport(map || mapFor(list), code) : null;
     const scored = [];
     for (const a of list) {
-      const city = a.city.toUpperCase(), name = a.name.toUpperCase();
+      const { city, name } = normOf(a);
       let s = -1;
-      if (a.iata === q) s = 0;
-      else if (city === q) s = 1;
+      if (a.iata === code) s = codeFirst ? 0 : 1.5;
+      else if (a.iata === metro) s = 0.5;
+      else if (city === q) s = codeFirst ? 1 : 0;
       else if (city.startsWith(q)) s = 2;
-      else if (a.iata.startsWith(q)) s = 3;
+      else if (a.iata.startsWith(code)) s = 3;
       else if (name.startsWith(q)) s = 4;
       else if (city.includes(q)) s = 5;
       else if (name.includes(q)) s = 6;
@@ -78,14 +113,24 @@
     return scored.slice(0, limit).map((x) => x[1]);
   }
 
-  /** Turn what the user typed ("jfk", "London", "Heathrow") into an IATA code, or null. */
+  /**
+   * Turn what the user typed ("jfk", "London", "Heathrow", "Sao Paulo", "NYC") into an IATA code,
+   * or null. A 3-letter word that is also a city name ("Goa", "Kos", "Rio") is read as the city
+   * unless it's typed in capitals.
+   */
   function resolveAirport(map, list, value, preferred) {
     const v = (value || "").trim();
     if (!v) return null;
     const up = v.toUpperCase();
-    if (/^[A-Z]{3}$/.test(up)) return map[up] ? up : null;
+    if (/^[A-Z]{3}$/.test(up)) {
+      const asCity = v !== up ? searchAirports(list, v, 1, preferred, map)[0] : null;
+      if (asCity && normOf(asCity).city === normText(v)) return asCity.iata;
+      if (map[up]) return up;
+      const metro = metroAirport(map, up);
+      if (metro) return metro;
+    }
     if (v.length < 3) return null;
-    const hit = searchAirports(list, v, 1, preferred)[0];
+    const hit = searchAirports(list, v, 1, preferred, map)[0];
     return hit ? hit.iata : null;
   }
 
@@ -132,12 +177,13 @@
 
   /** Autocomplete for the avoid box: matching countries first, then airports. Items: { value, code, detail }. */
   function searchPlaces(countries, airports, query, limit = 8, preferred = new Set()) {
-    const q = (query || "").trim().toUpperCase();
+    const q = normText(query), code = (query || "").trim().toUpperCase();
     if (!q) return [];
     const cs = countries
-      .filter((c) => c.code === q || c.name.toUpperCase().startsWith(q) || (q.length >= 3 && c.name.toUpperCase().includes(q)))
+      .map((c) => [c, normText(c.name)])
+      .filter(([c, n]) => c.code === code || n.startsWith(q) || (q.length >= 3 && n.includes(q)))
       // Exact code, then names starting with the text ("Ger" → Germany before Algeria/Nigeria)
-      .map((c) => [c.code === q ? 0 : c.name.toUpperCase().startsWith(q) ? 1 : 2, c])
+      .map(([c, n]) => [c.code === code ? 0 : n.startsWith(q) ? 1 : 2, c])
       .sort((x, y) => x[0] - y[0])
       .map((x) => x[1])
       .slice(0, 3)
@@ -156,13 +202,15 @@
     if (COUNTRY_ALIASES[up]) return COUNTRY_ALIASES[up];
     const byCode = countries.find((c) => c.code === up);
     if (byCode) return byCode.code;
-    const byName = countries.find((c) => c.name.toUpperCase() === up);
+    const byName = countries.find((c) => normText(c.name) === normText(v));
     if (byName) return byName.code;
+    // Partial country name ("Germ" → DE), matching what the autocomplete offers first.
+    const partial = up.length >= 3 ? countries.find((c) => normText(c.name).startsWith(normText(v))) : null;
+    // A metro code typed in lower case ("par") is more likely the start of a country name.
+    if (partial && v !== up && metroAirport(map, up)) return partial.code;
     const airport = resolveAirport(map, airports, v, preferred);
     if (airport) return airport;
-    // Partial country name ("Germ" → DE), matching what the autocomplete offers.
-    const q = up.length >= 3 ? countries.find((c) => c.name.toUpperCase().startsWith(up)) : null;
-    return q ? q.code : null;
+    return partial ? partial.code : null;
   }
 
   // ---------------------------------------------------------------------------
@@ -182,6 +230,9 @@
   const DETOUR_STEPS = [0.3, 0.6, 1.0, 2.0];
   const MAX_DETOUR = DETOUR_STEPS[0];
   const HUB_POOL = 12;
+  // A suggested stop must be at least this far from the airports on either side, so a stop is
+  // never in the same metro area (JFK → EWR) as where you just were or are heading next.
+  const MIN_LEG_KM = 150;
 
   const CONTINENTS = [
     ["any", "Any continent"], ["north-america", "North America & Caribbean"], ["south-america", "South America"],
@@ -215,6 +266,7 @@
     if (direct < 100) return [];
     const all = hubs
       .filter((h) => map[h.code] && !exclude.includes(h.code) && !skip(h.code))
+      .filter((h) => dist(map, from, h.code) >= MIN_LEG_KM && dist(map, h.code, to) >= MIN_LEG_KM)
       .map((h) => ({ ...h, country: map[h.code].country, detour: (dist(map, from, h.code) + dist(map, h.code, to)) / direct }))
       .filter((h) => countryOk(h.country, country, originCountry ?? map[from].country))
       .filter((h) => continent === "any" || COUNTRY_CONTINENT[h.country] === continent)
@@ -235,13 +287,14 @@
    * hubs re-ordered by distance from `from` so the route never doubles back.
    */
   function pickHubsForSegment(hubs, map, from, to, slots, variant, originCountry, exclude = [], skip = () => false) {
-    const used = new Set();
+    const used = new Set(), usedCodes = [];
     const picked = slots.map((slot) => {
       const cands = hubCandidates(hubs, map, from, to, { exclude, skip, country: slot.country, continent: slot.continent || "any", originCountry, maxDetour: slot.maxDetour });
       for (let i = 0; i < cands.length; i++) {
         const h = cands[(variant + i) % cands.length];
         const key = locationKey(map, h.code);
-        if (!used.has(key)) { used.add(key); return h; }
+        // Two stops in a row must also be a real flight apart (not NRT then HND, or JFK then EWR).
+        if (!used.has(key) && usedCodes.every((c) => dist(map, c, h.code) >= MIN_LEG_KM)) { used.add(key); usedCodes.push(h.code); return h; }
       }
       return null;
     });
@@ -250,16 +303,21 @@
     return picked.map((p) => (p ? chosen[k++] : null));
   }
 
-  /** Airports within `maxKm` of `code` (excluding it), closest first. */
-  function nearbyAirports(list, map, code, maxKm = 250, count = 3) {
+  /**
+   * Airports you could reasonably get to by land instead of `code`, closest first: within
+   * `maxKm` in the same country, or within `crossBorderKm` in another one (e.g. Basel for Zurich).
+   * The tighter limits keep out islands and cities across the sea (Menorca or Nice for Barcelona).
+   */
+  function nearbyAirports(list, map, code, maxKm = 200, count = 3, crossBorderKm = 100) {
     const a = map[code];
     if (!a) return [];
     return list
       .filter((b) => b.iata !== code)
-      .map((b) => ({ code: b.iata, dist: haversine(a.lat, a.lon, b.lat, b.lon) }))
-      .filter((b) => b.dist <= maxKm)
+      .map((b) => ({ code: b.iata, dist: haversine(a.lat, a.lon, b.lat, b.lon), country: b.country }))
+      .filter((b) => b.dist <= (b.country === a.country ? maxKm : crossBorderKm))
       .sort((x, y) => x.dist - y.dist)
-      .slice(0, count);
+      .slice(0, count)
+      .map(({ code: c, dist: d }) => ({ code: c, dist: d }));
   }
 
   // ---------------------------------------------------------------------------
@@ -319,6 +377,7 @@
   }
 
   // Approximate, fixed exchange rates (USD base). Estimates only.
+  const RATES_AS_OF = "Nov 2026";
   const CURRENCIES = { USD: 1, EUR: 0.92, GBP: 0.79, CAD: 1.38, AUD: 1.52, MXN: 18, JPY: 150, INR: 84, AED: 3.67 };
   function formatMoney(usd, currency = "USD") {
     const rate = CURRENCIES[currency] || 1;
@@ -463,7 +522,18 @@
     }
 
     const itineraries = [...best.values()].sort((a, b) => a.totalCost - b.totalCost).slice(0, MAX_RESULTS);
+    // Say why there are fewer results than usual: every itinerary gets its own stopover cities,
+    // and only a few cities sit near this route.
+    if (hasSuggest && itineraries.length && itineraries.length < MIN_RESULTS) {
+      const n = itineraries.length;
+      warnings.add(`Only ${n} itinerar${n === 1 ? "y" : "ies"} found: few stopover cities lie near this route without a big detour, and each itinerary gets its own. For more choices, pick a stop yourself (“I know where”), remove a suggested stop, or loosen its country/continent preference.`);
+    }
     return { itineraries, warnings: [...warnings] };
+  }
+
+  /** Indexes of legs that fly on the same day as the previous leg (separately booked connections). */
+  function sameDayConnections(itin) {
+    return itin.legs.map((l, i) => (i > 0 && l.date === itin.legs[i - 1].date ? i : -1)).filter((i) => i >= 0);
   }
 
   // ---------------------------------------------------------------------------
@@ -500,11 +570,12 @@
   // Deep links are best-effort and may need updating when airlines change their sites.
   const AIRLINES = [
     { key: "delta", tier: 2, name: "Delta", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
-      url: (o, d, date, p) => `https://www.delta.com/flight-search/search?action=findFlights&tripType=ONE_WAY&originCity=${o}&destinationCity=${d}&departureDate=${mdy(date)}&paxCount=${p.adults}&searchByCabin=true` },
+      url: (o, d, date, p, c) => `https://www.delta.com/flight-search/search?action=findFlights&tripType=ONE_WAY&originCity=${o}&destinationCity=${d}&departureDate=${mdy(date)}&paxCount=${p.adults}&searchByCabin=true&cabinFareClass=${{ economy: "BE", "premium-economy": "DPPS", business: "D1", first: "FIRST" }[c] || "BE"}` },
     { key: "american", tier: 2, name: "American", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => { const slices = JSON.stringify([{ orig: o, origNearby: false, dest: d, destNearby: false, date }]); return `https://www.aa.com/booking/search?locale=en_US&pax=${p.adults}&adult=${p.adults}&type=OneWay&searchType=Revenue&cabin=&carriers=ALL&slices=${encodeURIComponent(slices)}`; } },
     { key: "united", tier: 2, name: "United", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["US"])),
-      url: (o, d, date, p) => `https://www.united.com/en/us/fsr/choose-flights?f=${o}&t=${d}&d=${date}&tt=1&sc=7&px=${p.adults}` },
+      // sc=7 selects economy; United has no documented value for other cabins, so it's left out for them.
+      url: (o, d, date, p, c) => `https://www.united.com/en/us/fsr/choose-flights?f=${o}&t=${d}&d=${date}&tt=1${!c || c === "economy" ? "&sc=7" : ""}&px=${p.adults}` },
     { key: "jetblue", tier: 1, name: "JetBlue", home: "NA",
       serves: (o, d) => either(o, d, (a) => inR(a, ["US"])) && (both(o, d, (a) => inR(a, NA)) || either(o, d, (a) => inR(a, ["GB", "FR", "IE", "NL"]))),
       url: (o, d, date, p) => `https://www.jetblue.com/booking/flights?from=${o}&to=${d}&depart=${date}&isMultiCity=false&noOfRoute=1&lang=en&adults=${p.adults}&sharedMarket=false&roundTripFares=false` },
@@ -512,28 +583,50 @@
       url: (o, d, date, p) => `https://www.southwest.com/air/booking/select.html?originationAirportCode=${o}&destinationAirportCode=${d}&departureDate=${date}&tripType=oneway&adultPassengersCount=${p.adults}&fareType=USD` },
     { key: "alaska", tier: 2, name: "Alaska", home: "NA", serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => `https://www.alaskaair.com/shopping/flights?tripType=ow&adults=${p.adults}&prior=AS&departureCity=${o}&arrivalCity=${d}&departureDate=${mdy(date)}` },
+    // Norse: low-cost transatlantic from a few US cities to Northern/Western Europe (not Heathrow).
+    { key: "norse", tier: 1, name: "Norse Atlantic", home: "EU", skip: ["LHR", "LCY", "STN", "LTN", "FRA", "MUC", "AMS", "ZRH", "GVA", "ORY"],
+      serves: (o, d) => [[o, d], [d, o]].some(([us, eu]) => inR(us, ["US"]) && ["JFK", "EWR", "MCO", "FLL", "MIA", "LAX", "BOS", "IAD", "SFO"].includes(us.iata)
+        && inR(eu, ["NO", "GB", "FR", "DE", "IT", "DK", "SE", "GR"])),
+      url: () => "https://flynorse.com/" }, // home page
     { key: "frontier", tier: 0, name: "Frontier", home: "NA", skip: ["JFK"], serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
       url: (o, d, date, p) => { const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]; const [, m, dd] = ymd(date); return `https://booking.flyfrontier.com/Flight/InternalSelect?o1=${o}&d1=${d}&dd1=${mon[+m - 1]}+${+dd}&ADT=${p.adults}&mon=true&r=false`; } },
+    { key: "spirit", tier: 0, name: "Spirit", home: "NA", skip: ["JFK", "SFO", "SEA"], serves: (o, d) => both(o, d, (a) => inR(a, NA)) && either(o, d, (a) => inR(a, ["US"])),
+      url: () => "https://www.spirit.com/" }, // home page
     { key: "aircanada", tier: 2, name: "Air Canada", home: "NA", serves: (o, d) => either(o, d, (a) => inR(a, ["CA"])),
       url: (o, d, date, p, c) => `https://flightbookings.aircanada.com/en-us/#/search?legs=${o}:${d}::${date}&pax=${p.adults}:0:0:0:0:0&cabin=${{ economy: "economy", "premium-economy": "premiumEconomy", business: "business", first: "business" }[c]}` },
     { key: "british", tier: 2, name: "British Airways", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p, c) => `https://www.britishairways.com/travel/book/public/en_us?eId=111091&from=${o}&to=${d}&depDate=${date}&cabin=${{ economy: "M", "premium-economy": "W", business: "C", first: "F" }[c]}&ad=${p.adults}&yf=0&ch=0&inf=0&trip=ow` },
     { key: "lufthansa", tier: 2, name: "Lufthansa", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
-      url: (o, d, date, p) => `https://www.lufthansa.com/us/en/select-flights?searchType=ONEWAY&cbm=ECO&li=0&pax=a${p.adults}&segments=${o}-${d}-${date}` },
+      url: (o, d, date, p, c) => `https://www.lufthansa.com/us/en/select-flights?searchType=ONEWAY&cbm=${{ economy: "ECO", "premium-economy": "PRECO", business: "BUS", first: "FIRST" }[c] || "ECO"}&li=0&pax=a${p.adults}&segments=${o}-${d}-${date}` },
     { key: "airfrance", tier: 2, name: "Air France", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p, c) => `https://www.airfrance.us/search/offer?pax=${p.adults}:0:0:0:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "FIRST" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
     { key: "klm", tier: 2, name: "KLM", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, EU)),
       url: (o, d, date, p, c) => `https://www.klm.us/search/offer?pax=${p.adults}:0:0:0:0:0:0:0&cabinClass=${{ economy: "ECONOMY", "premium-economy": "PREMIUM", business: "BUSINESS", first: "BUSINESS" }[c]}&activeConnection=0&connections=${o}>${d}-${date}` },
     { key: "turkish", tier: 2, name: "Turkish Airlines", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME) || inR(a, EU)) || km > 5000,
-      url: (o, d, date, p) => `https://www.turkishairlines.com/en-us/flights/?origin=${o}&destination=${d}&departureDate=${date}&adult=${p.adults}&tripType=O&cabin=E` },
+      // Turkish sells economy and business only.
+      url: (o, d, date, p, c) => `https://www.turkishairlines.com/en-us/flights/?origin=${o}&destination=${d}&departureDate=${date}&adult=${p.adults}&tripType=O&cabin=${c === "business" || c === "first" ? "B" : "E"}` },
     { key: "emirates", tier: 2, name: "Emirates", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
-      url: (o, d, date, p) => `https://www.emirates.com/us/english/book/flights/?from=${o}&to=${d}&departing=${date}&pax=${p.adults}&class=ECO&triptype=OW` },
+      url: (o, d, date, p, c) => `https://www.emirates.com/us/english/book/flights/?from=${o}&to=${d}&departing=${date}&pax=${p.adults}&class=${{ economy: "ECO", "premium-economy": "PRM", business: "BUS", first: "FST" }[c] || "ECO"}&triptype=OW` },
     { key: "qatar", tier: 2, name: "Qatar Airways", home: "ME", serves: (o, d, km) => either(o, d, (a) => inR(a, ME)) || km > 5000,
       url: (o, d, date, p, c) => `https://www.qatarairways.com/en-us/booking/book-flights.html?from=${o}&to=${d}&departing=${date}&adults=${p.adults}&travelClass=${{ economy: "Economy", "premium-economy": "Economy", business: "Business", first: "First" }[c]}&tripType=O` },
     { key: "singapore", tier: 2, name: "Singapore Airlines", home: "ASIA", serves: (o, d, km) => either(o, d, (a) => inR(a, ["SG"])) || (either(o, d, (a) => inR(a, ASIA)) && km > 2500),
       url: (o, d, date, p, c) => `https://www.singaporeair.com/en_UK/plan-and-book/booking/?from=${o}&to=${d}&departDate=${date}&cabinClass=${{ economy: "Y", "premium-economy": "S", business: "J", first: "F" }[c]}&adult=${p.adults}&type=one-way` },
     { key: "cathay", tier: 2, name: "Cathay Pacific", home: "ASIA", serves: (o, d, km) => either(o, d, (a) => inR(a, ["HK"])) || (either(o, d, (a) => inR(a, ASIA)) && km > 2500),
       url: (o, d, date, p, c) => `https://www.cathaypacific.com/cx/en_US/book-a-trip/flight-search.html?origin=${o}&destination=${d}&departDate=${date}&cabin=${{ economy: "Y", "premium-economy": "W", business: "J", first: "F" }[c]}&adults=${p.adults}&tripType=OW` },
+    { key: "iberia", tier: 2, name: "Iberia", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, ["ES"])),
+      url: () => "https://www.iberia.com/us/" }, // home page
+    { key: "tap", tier: 2, name: "TAP Air Portugal", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, ["PT"])),
+      url: () => "https://www.flytap.com/en-us/" }, // home page
+    { key: "aerlingus", tier: 2, name: "Aer Lingus", home: "EU", serves: (o, d) => either(o, d, (a) => inR(a, ["IE"])),
+      url: () => "https://www.aerlingus.com/" }, // home page
+    { key: "ana", tier: 2, name: "ANA", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ["JP"])),
+      url: () => "https://www.ana.co.jp/en/us/" }, // home page
+    { key: "jal", tier: 2, name: "Japan Airlines", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ["JP"])),
+      url: () => "https://www.jal.co.jp/en/" }, // home page
+    { key: "qantas", tier: 2, name: "Qantas", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ["AU"])),
+      url: () => "https://www.qantas.com/us/en.html" }, // home page
+    { key: "airindia", tier: 2, name: "Air India", home: "ASIA", serves: (o, d) => either(o, d, (a) => inR(a, ["IN"])),
+      url: () => "https://www.airindia.com/" }, // home page
 
     // Low-cost carriers. `skip` lists big airports they don't fly from.
     // Links marked "home page" open the airline's booking page; their search URLs aren't stable.
@@ -678,7 +771,9 @@
   function itineraryToText(itin, map, { cabin, pax, currency }) {
     const lines = [`Trip: ${itin.codes.map((c) => airportLabel(map, c)).join(" → ")}`, ...(itin.note ? [itin.note] : []),
       `Estimated total: ~${formatMoney(itin.totalCost, currency)} (${paxPhrase(pax)}, ${cabin.replace("-", " ")})`, ""];
+    const sameDay = new Set(sameDayConnections(itin));
     itin.legs.forEach((l, i) => {
+      if (sameDay.has(i)) lines.push(`  ⚠ Same day as leg ${i}: booked separately, so leave at least 3 hours to connect.`);
       lines.push(`Leg ${i + 1}${l.isReturn ? " (return)" : ""}: ${airportLabel(map, l.from)} → ${airportLabel(map, l.to)} — ${formatDate(l.date)} — ~${formatDuration(estimateFlightMinutes(map, l.from, l.to))} flight — ~${formatMoney(l.cost || 0, currency)}`);
       lines.push(`  Search: ${googleFlightsUrl(l.from, l.to, l.date, cabin, pax, currency)}`);
       const cheap = cheapestAirlineLink(map, l.from, l.to, l.date, cabin, pax);
@@ -690,6 +785,18 @@
 
   const icsEscape = (s) => String(s).replace(/[\\;,]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
   const icsDate = (s) => s.replace(/-/g, "");
+  /** RFC 5545 line folding: lines longer than 75 bytes continue on the next line after a space. */
+  function icsFold(line) {
+    const enc = new TextEncoder(), parts = [];
+    let cur = "", bytes = 0;
+    for (const ch of line) {
+      const n = enc.encode(ch).length;
+      if (bytes + n > (parts.length ? 74 : 75)) { parts.push(cur); cur = ""; bytes = 0; }
+      cur += ch; bytes += n;
+    }
+    parts.push(cur);
+    return parts.join("\r\n ");
+  }
 
   function itineraryToICS(itin, map, { cabin, pax, currency }, now = new Date()) {
     const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
@@ -705,7 +812,7 @@
         "TRANSP:TRANSPARENT", "END:VEVENT");
     });
     out.push("END:VCALENDAR");
-    return out.join("\r\n") + "\r\n";
+    return out.map(icsFold).join("\r\n") + "\r\n";
   }
 
   globalThis.PlanMyTrip = {
@@ -744,9 +851,13 @@
     estimateFlightMinutes,
     formatDuration,
     CURRENCIES,
+    RATES_AS_OF,
     formatMoney,
     MIN_RESULTS,
     MAX_RESULTS,
+    MIN_LEG_KM,
+    normText,
+    sameDayConnections,
     buildItineraries,
     paxPhrase,
     googleFlightsUrl,
