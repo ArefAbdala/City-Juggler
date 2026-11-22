@@ -218,7 +218,7 @@ test("formatMoney converts currency", () => {
 test("continent preference is respected, widening the detour when needed", () => {
   const { itineraries, warnings } = L.buildItineraries({ ...base, depAirports: ["JFK"], arrAirports: ["LHR"],
     stops: [{ mode: "suggest", country: "any", continent: "africa" }] });
-  assert.equal(warnings.length, 0);
+  assert.ok(!warnings.some((w) => /Couldn't find/.test(w)), warnings.join(" "));
   for (const it of requested(itineraries)) assert.equal(L.COUNTRY_CONTINENT[map[it.codes[1]].country], "africa", it.codes.join(">"));
 });
 
@@ -347,4 +347,89 @@ test("duration: formats hours and minutes", () => {
   assert.equal(L.formatDuration(45), "45m");
   assert.equal(L.formatDuration(120), "2h 00m");
   assert.equal(L.formatDuration(null), "");
+});
+
+// --- Review fixes --------------------------------------------------------------
+test("3-letter city names resolve to the city; capitals mean the code", () => {
+  const r = (v) => L.resolveAirport(map, airports, v);
+  assert.equal(r("Goa"), "GOI"); // Goa, India — not Genoa (GOA)
+  assert.equal(r("GOA"), "GOA");
+  assert.equal(r("Kos"), "KGS");
+  assert.equal(r("Sal"), "SID");
+  assert.equal(r("SAL"), "SAL");
+  assert.equal(r("lhr"), "LHR");
+  assert.equal(r("Ber"), "BER");
+});
+
+test("search ignores accents and punctuation", () => {
+  const r = (v) => L.resolveAirport(map, airports, v, new Set(hubs.map((h) => h.code)));
+  assert.equal(r("Sao Paulo"), "GRU");
+  assert.equal(r("St Louis"), "STL");
+  assert.equal(r("Saint Louis"), "STL");
+  assert.equal(L.normText("Zürich-Kloten"), "ZURICH KLOTEN");
+});
+
+test("metro codes resolve to the main airport", () => {
+  const r = (v) => L.resolveAirport(map, airports, v);
+  assert.equal(r("NYC"), "JFK");
+  assert.equal(r("lon"), "LHR");
+  assert.equal(r("Rio"), "GIG");
+  assert.equal(L.searchAirports(airports, "TYO", 1, new Set(), map)[0].iata, "HND");
+});
+
+test("suggested stops are a real flight away from both neighbours and each other", () => {
+  for (const [o, d, n] of [["JFK", "LAX", 2], ["BOS", "MIA", 1], ["LHR", "SYD", 3]]) {
+    const stops = Array.from({ length: n }, () => ({ mode: "suggest", country: "any", continent: "any" }));
+    const { itineraries } = L.buildItineraries({ ...base, depAirports: [o], arrAirports: [d], stops });
+    for (const it of itineraries) it.legs.forEach((l) => assert.ok(L.dist(map, l.from, l.to) >= L.MIN_LEG_KM, it.codes.join(">")));
+  }
+});
+
+test("fewer results than usual with suggested stops comes with an explanation", () => {
+  const stops = [{ mode: "fixed", airport: "MAD", date: "", country: "any", continent: "any" }, { mode: "suggest", country: "any", continent: "any" }];
+  const { itineraries, warnings } = L.buildItineraries({ ...base, depAirports: ["MCO"], arrAirports: ["LIS"], stops });
+  assert.ok(itineraries.length < L.MIN_RESULTS);
+  assert.ok(warnings.some((w) => /^Only \d+ itinerar/.test(w)));
+});
+
+test("nearby airports stay in the same country unless very close", () => {
+  const near = L.nearbyAirports(airports, map, "BCN").map((n) => n.code);
+  assert.ok(!near.includes("MAH") && !near.includes("NCE"), near.join(","));
+  assert.ok(L.nearbyAirports(airports, map, "JFK").some((n) => n.code === "LGA"));
+});
+
+test("airline links pass the cabin where the airline supports it", () => {
+  const links = Object.fromEntries(L.airlineLinks(map, "JFK", "FRA", "2026-12-10", "business", pax1).map((l) => [l.key, l.url]));
+  assert.match(links.lufthansa, /cbm=BUS/);
+  assert.match(links.turkish, /cabin=B/);
+  assert.match(links.emirates, /class=BUS/);
+  assert.match(links.delta, /cabinFareClass=D1/);
+  assert.doesNotMatch(links.united, /sc=7/);
+  const eco = Object.fromEntries(L.airlineLinks(map, "JFK", "FRA", "2026-12-10", "economy", pax1).map((l) => [l.key, l.url]));
+  assert.match(eco.united, /sc=7/);
+});
+
+test("new airlines appear on their routes", () => {
+  const keys = (o, d) => L.airlinesForRoute(map, o, d).map((a) => a.key);
+  assert.ok(keys("MCO", "MAD").includes("iberia"));
+  assert.ok(keys("JFK", "LIS").includes("tap"));
+  assert.ok(keys("JFK", "DUB").includes("aerlingus"));
+  assert.ok(keys("LAX", "NRT").includes("ana") && keys("LAX", "NRT").includes("jal"));
+  assert.ok(keys("LAX", "SYD").includes("qantas"));
+  assert.ok(keys("JFK", "DEL").includes("airindia"));
+  assert.ok(keys("FLL", "ATL").includes("spirit"));
+  assert.ok(keys("JFK", "LGW").includes("norse") && !keys("JFK", "LHR").includes("norse"));
+});
+
+test("calendar lines are folded at 75 bytes", () => {
+  const { itineraries } = L.buildItineraries({ ...base, depAirports: ["JFK"], arrAirports: ["LHR"], stops: [] });
+  const ics = L.itineraryToICS(itineraries[0], map, { cabin: "economy", pax: pax1, currency: "USD" });
+  const enc = new TextEncoder();
+  assert.ok(ics.split("\r\n").every((line) => enc.encode(line).length <= 75));
+  assert.match(ics.replace(/\r\n /g, ""), /Search flights: https:\/\/www\.google\.com\/travel\/flights/);
+});
+
+test("same-day connections are detected", () => {
+  const itin = { legs: [{ date: "2026-12-10" }, { date: "2026-12-10" }, { date: "2026-12-12" }] };
+  assert.deepEqual(L.sameDayConnections(itin), [1]);
 });

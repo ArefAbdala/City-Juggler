@@ -129,7 +129,10 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .tag.best { color: var(--good); }
 .tag.cheapest { color: var(--good); background: rgba(19, 122, 67, 0.1); border-color: var(--good); }
 
-.bar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.bar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sort-field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.sort-field select { width: auto; padding: 6px 30px 6px 8px; font-size: 13px; }
+.same-day { color: var(--warn); margin: 6px 0; }
 .itin-details > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 10px 16px; border-top: 1px solid var(--line); min-height: 44px; box-sizing: border-box; }
 .itin-details > summary::-webkit-details-marker { display: none; }
@@ -234,6 +237,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   .itin-leg { padding: 12px 14px; }
   .itin-details > summary { padding: 10px 14px; }
   .bar-actions { width: 100%; }
+  .sort-field { flex: 1 1 100%; font-size: 14px; }
+  .sort-field select { flex: 1; font-size: 16px; min-height: 44px; }
   .itin-leg-airports .ap-place { display: block; }
   .itin-leg-airports .ap-place::before { content: none; }
   .itin-leg-route { font-size: 15px; }
