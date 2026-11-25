@@ -182,7 +182,7 @@ function renderAlts(prefix) {
     </div>`).join("");
   container.querySelectorAll("input").forEach((inp) => {
     const i = +inp.dataset.idx;
-    setupAutocomplete(inp, $(`${prefix}-alt-ac-${i}`), (v) => { arr[i] = v; });
+    setupAutocomplete(inp, $(`${prefix}-alt-ac-${i}`), (v) => { arr[i] = v; updateMoreSummary(); });
   });
   container.querySelectorAll(".remove-alt").forEach((btn) => btn.addEventListener("click", () => {
     arr.splice(+btn.dataset.idx, 1); renderAlts(prefix);
@@ -190,6 +190,7 @@ function renderAlts(prefix) {
   }));
   $(`add-${prefix}-alt`).hidden = arr.length >= MAX_ALTS;
   if (prefix === "arr") updateReturnHome();
+  updateMoreSummary();
 }
 $("add-dep-alt").addEventListener("click", () => { depAlts.push(""); renderAlts("dep"); $(`dep-alt-${depAlts.length - 1}`).focus(); });
 $("add-arr-alt").addEventListener("click", () => { arrAlts.push(""); renderAlts("arr"); $(`arr-alt-${arrAlts.length - 1}`).focus(); });
@@ -257,6 +258,14 @@ $("add-stop").addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // Places to avoid
 // ---------------------------------------------------------------------------
+/** "More options" summary: what's set inside it, so nothing hidden there is forgotten. */
+function updateMoreSummary() {
+  const n = depAlts.filter((a) => a.trim()).length + arrAlts.filter((a) => a.trim()).length + avoid.length + ($("currency").value !== "USD" ? 1 : 0);
+  $("more-summary").textContent = n ? `${n} in use` : "Alternate airports, places to avoid, currency";
+  $("more-options").classList.toggle("in-use", n > 0);
+}
+$("currency").addEventListener("change", updateMoreSummary);
+
 function renderAvoid() {
   $("avoid-list").innerHTML = avoid.map((x, i) => `
     <li class="chip"><span>${esc(dataReady ? avoidLabel(airportMap, airports, x) : x)}</span>
@@ -265,6 +274,7 @@ function renderAvoid() {
   const full = avoid.length >= MAX_AVOID;
   $("avoid-input").disabled = $("avoid-add").disabled = full;
   $("avoid-input").placeholder = full ? `Up to ${MAX_AVOID} places` : "City, airport or country";
+  updateMoreSummary();
 }
 
 function addAvoid(text) {
@@ -323,6 +333,7 @@ function applyState(s) {
   renderStops();
   avoid = [...(s.avoid || [])]; renderAvoid();
   updateReturnHome();
+  if (s.depAlts.length || s.arrAlts.length || avoid.length || s.currency !== "USD") $("more-options").open = true;
 }
 
 const scrollBehavior = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
@@ -373,7 +384,10 @@ function plan() {
   const dateErr = s.depart && validateStopDates(s.depart, s.end, s.stops.map((st) => (st.mode === "fixed" ? st.date : "")), endUsed());
   if (dateErr) errors.push(dateErr);
 
-  if (errors.length) { showBanner(errors); $("banner").scrollIntoView({ behavior: scrollBehavior(), block: "center" }); return; }
+  if (errors.length) {
+    if (depA.length || arrA.length) $("more-options").open = true; // errors may name an alternate airport
+    showBanner(errors); $("banner").scrollIntoView({ behavior: scrollBehavior(), block: "center" }); return;
+  }
 
   // Show the resolved codes so the user sees what was matched.
   $("origin").value = origin; if (dest) $("destination").value = dest;
@@ -454,9 +468,10 @@ function renderItineraries(found, opts) {
     <div class="bar-actions">
       ${sortSelect}
       <button type="button" class="ghost-btn" data-action="toggle-all" aria-controls="results">Expand all</button>
-      <button type="button" class="ghost-btn" data-action="share">Copy link to this search</button>
+      <button type="button" class="ghost-btn" data-action="share">Share this search</button>
     </div>
-  </div>`;
+  </div>
+  <p class="results-note">Prices are rough estimates (exchange rates as of ${esc(RATES_AS_OF)}). Open a booking link for live fares — each flight is booked separately.</p>`;
 
   itineraries.forEach((itin, idx) => {
     const cheapest = itineraries.length > 1 && itin.totalCost === cheapestCost && itineraries.findIndex((it) => it.totalCost === cheapestCost) === idx;
@@ -511,7 +526,6 @@ function renderItineraries(found, opts) {
           <button type="button" class="ghost-btn" data-action="copy" data-idx="${idx}">Copy as text</button>
           <button type="button" class="ghost-btn" data-action="ics" data-idx="${idx}">Add to calendar (.ics)</button>
         </div>
-        <div class="sub">Estimates are approximate (exchange rates as of ${esc(RATES_AS_OF)}) — open the links for live prices. Each flight is booked separately.</div>
       </div></article>`;
   });
   $("results").innerHTML = html;
