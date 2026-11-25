@@ -2,7 +2,7 @@
 
 A fully static trip planning tool. Build multi-stop itineraries, get stopover recommendations, and search flights on Google Flights and airline websites — all client-side, no backend required.
 
-**Live:** [cityjuggler.com](https://cityjuggler.com) (the Cloudflare Pages project is still named `plan-my-trip`, so it is also served at plan-my-trip.pages.dev)
+**Live:** [cityjuggler.com](https://cityjuggler.com) · **Repo:** [ArefAbdala/City-Juggler](https://github.com/ArefAbdala/City-Juggler) (renamed from Plan-My-Trip; the Cloudflare Pages project is still named `plan-my-trip`, so the site is also served at plan-my-trip.pages.dev)
 
 ![Screenshot](screenshot.png)
 
