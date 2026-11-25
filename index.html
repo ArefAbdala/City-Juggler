@@ -43,75 +43,91 @@
 <script defer src="js/app.js"></script>
 </head>
 <body>
-<header>
-  <h1>✈ Plan My Trip</h1>
-  <p>Multi-stop itinerary planner — build your route, then book each leg on Google Flights or directly with airlines.</p>
+<header class="hero">
+  <h1><span aria-hidden="true">✈</span> Plan My Trip</h1>
+  <p class="tagline">Plan a multi-city trip, discover stopover cities along the way, and book each flight on Google Flights or with the airline.</p>
+  <ul class="perks" aria-label="Highlights"><li>Free</li><li>No sign-up</li><li>Nothing stored on a server</li></ul>
 </header>
 <main>
   <form id="f" autocomplete="off" novalidate>
-    <!-- Route -->
-    <div class="section-label" id="route-label">Route</div>
-    <div class="airport-row">
-      <div class="field ac-wrap">
-        <label for="origin">From</label>
-        <input id="origin" class="code" placeholder="City or code" required value="MCO" autocapitalize="words" spellcheck="false">
-        <div class="ac-list" id="origin-ac"></div>
+    <fieldset class="step">
+      <legend><span class="step-num" aria-hidden="true">1</span>Where are you going?</legend>
+      <div class="airport-row">
+        <div class="field ac-wrap">
+          <label for="origin">From</label>
+          <input id="origin" class="code" placeholder="e.g. New York" required autocapitalize="words" spellcheck="false">
+          <div class="ac-list" id="origin-ac"></div>
+        </div>
+        <button type="button" class="swap" id="swap" aria-label="Swap departure and arrival airports" title="Swap airports">⇄</button>
+        <div class="field ac-wrap" id="destination-field">
+          <label for="destination">To</label>
+          <input id="destination" class="code" placeholder="e.g. Lisbon" required autocapitalize="words" spellcheck="false">
+          <div class="ac-list" id="destination-ac"></div>
+        </div>
       </div>
-      <button type="button" class="swap" id="swap" aria-label="Swap departure and arrival airports" title="Swap airports">⇄</button>
-      <div class="field ac-wrap" id="destination-field">
-        <label for="destination">To</label>
-        <input id="destination" class="code" placeholder="City or code" required autocapitalize="words" spellcheck="false">
-        <div class="ac-list" id="destination-ac"></div>
+      <label class="check-row"><input type="checkbox" id="return-home"><span>Round trip — fly back to where I started</span></label>
+    </fieldset>
+
+    <fieldset class="step">
+      <legend><span class="step-num" aria-hidden="true">2</span>When?</legend>
+      <div class="grid-dates">
+        <div class="field"><label for="depart">Depart</label><input id="depart" type="date" required></div>
+        <div class="field" id="end-field"><label for="ret" id="end-label">Return</label><input id="ret" type="date"></div>
       </div>
-    </div>
-    <label class="check-row"><input type="checkbox" id="return-home"><span>My final destination is the same as where I'm departing from</span></label>
-    <div id="dep-alts" class="alt-list"></div>
-    <button type="button" class="add-btn" id="add-dep-alt">+ Alternate departure airport</button>
-    <div id="arr-alts" class="alt-list"></div>
-    <button type="button" class="add-btn" id="add-arr-alt">+ Alternate arrival airport</button>
+      <div class="sub hint" id="date-hint"></div>
+    </fieldset>
 
-    <!-- Dates -->
-    <div class="section-label">Dates</div>
-    <div class="grid-dates">
-      <div class="field"><label for="depart">Depart</label><input id="depart" type="date" required></div>
-      <div class="field" id="end-field"><label for="ret" id="end-label">Return</label><input id="ret" type="date"></div>
-    </div>
-    <div class="sub hint" id="date-hint"></div>
+    <fieldset class="step">
+      <legend><span class="step-num" aria-hidden="true">3</span>Cities to visit on the way <span class="label-note">optional</span></legend>
+      <div class="sub hint step-hint">Places you'll stay for a while — not flight connections. Up to 4. Not sure where? Choose “Suggest for me”.</div>
+      <div class="stops-section" id="stops-section"></div>
+      <button type="button" class="add-btn" id="add-stop">+ Add a city stop</button>
+    </fieldset>
 
-    <!-- Stops -->
-    <div class="section-label">City stops along the way <span class="label-note">(not layovers)</span></div>
-    <div class="stops-section" id="stops-section"></div>
-    <button type="button" class="add-btn" id="add-stop">+ Add a city stop</button>
-    <div class="sub hint">Up to 4 city stops where you intentionally break your trip. Flight layovers/connections don't count — those are part of each leg.</div>
-
-    <!-- Places to avoid -->
-    <div class="section-label" id="avoid-label">Places to avoid <span class="label-note">(optional)</span></div>
-    <div class="avoid-row">
-      <div class="field ac-wrap">
-        <label for="avoid-input" class="visually-hidden">Add a city, airport or country to avoid</label>
-        <input id="avoid-input" placeholder="City, airport or country" autocapitalize="words" spellcheck="false" aria-describedby="avoid-hint avoid-error">
-        <div class="ac-list" id="avoid-ac"></div>
+    <fieldset class="step">
+      <legend><span class="step-num" aria-hidden="true">4</span>Who's travelling?</legend>
+      <div class="grid-pax">
+        <div class="field"><label for="adults">Travellers</label><select id="adults"></select></div>
+        <div class="field"><label for="seat">Cabin</label>
+          <select id="seat">
+            <option value="economy">Economy</option><option value="premium-economy">Premium economy</option>
+            <option value="business">Business</option><option value="first">First</option>
+          </select></div>
       </div>
-      <button type="button" class="ghost-btn" id="avoid-add">Add</button>
-    </div>
-    <div class="sub field-error" id="avoid-error" role="alert"></div>
-    <ul id="avoid-list" class="chips" aria-labelledby="avoid-label" hidden></ul>
-    <div class="sub hint" id="avoid-hint">Avoided cities and countries are never suggested as stops or alternative airports. Choosing an airport avoids its whole city. Connections inside a flight are set by the airline — check them when booking.</div>
+    </fieldset>
 
-    <!-- Travellers & options -->
-    <div class="section-label">Travellers &amp; options</div>
-    <div class="grid-pax">
-      <div class="field"><label for="adults">Travellers</label><select id="adults"></select></div>
-    </div>
-    <div class="grid-options">
-      <div class="field"><label for="seat">Cabin</label>
-        <select id="seat">
-          <option value="economy">Economy</option><option value="premium-economy">Premium economy</option>
-          <option value="business">Business</option><option value="first">First</option>
-        </select></div>
-      <div class="field"><label for="currency">Currency</label><select id="currency"></select></div>
-      <div class="field go-field">
-        <button class="go" id="go" type="submit" disabled>Loading airports…</button></div>
+    <details class="more-options" id="more-options">
+      <summary><span class="more-title">More options</span> <span class="sub" id="more-summary">Alternate airports, places to avoid, currency</span></summary>
+      <div class="more-body">
+        <div class="sub-heading">Alternate airports</div>
+        <div class="sub hint">Every combination is compared — handy for cities with several airports.</div>
+        <div id="dep-alts" class="alt-list"></div>
+        <button type="button" class="add-btn" id="add-dep-alt">+ Alternate departure airport</button>
+        <div id="arr-alts" class="alt-list"></div>
+        <button type="button" class="add-btn" id="add-arr-alt">+ Alternate arrival airport</button>
+
+        <div class="sub-heading" id="avoid-label">Places to avoid</div>
+        <div class="avoid-row">
+          <div class="field ac-wrap">
+            <label for="avoid-input" class="visually-hidden">Add a city, airport or country to avoid</label>
+            <input id="avoid-input" placeholder="City, airport or country" autocapitalize="words" spellcheck="false" aria-describedby="avoid-hint avoid-error">
+            <div class="ac-list" id="avoid-ac"></div>
+          </div>
+          <button type="button" class="ghost-btn" id="avoid-add">Add</button>
+        </div>
+        <div class="sub field-error" id="avoid-error" role="alert"></div>
+        <ul id="avoid-list" class="chips" aria-labelledby="avoid-label" hidden></ul>
+        <div class="sub hint" id="avoid-hint">Never suggested as stops or alternative airports. Choosing an airport avoids its whole city.</div>
+
+        <div class="sub-heading">Currency</div>
+        <div class="grid-currency">
+          <div class="field"><label for="currency" class="visually-hidden">Currency</label><select id="currency"></select></div>
+        </div>
+      </div>
+    </details>
+
+    <div class="go-row">
+      <button class="go" id="go" type="submit" disabled>Loading airports…</button>
     </div>
   </form>
 
