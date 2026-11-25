@@ -5,8 +5,8 @@ import "../js/hubs.js";
 import "../js/lib.js";
 
 // The browser scripts publish globals (they're plain scripts so file:// works).
-const L = globalThis.PlanMyTrip;
-const { airports, hubs } = globalThis.PlanMyTripData;
+const L = globalThis.CityJuggler;
+const { airports, hubs } = globalThis.CityJugglerData;
 const map = L.indexAirports(airports);
 const pax1 = { adults: 1 };
 const requested = (its) => its.filter((i) => !i.note); // exclude nearby-airport / flexible-date extras
@@ -354,7 +354,7 @@ test("sitemap lists every generated route page and nothing missing", async () =>
   const { readFileSync, readdirSync, existsSync } = await import("node:fs");
   const root = new URL("..", import.meta.url);
   const sitemap = readFileSync(new URL("sitemap.xml", root), "utf8");
-  const listed = [...sitemap.matchAll(/<loc>https:\/\/plan-my-trip\.pages\.dev\/routes\/([^/<]+)\/<\/loc>/g)].map((m) => m[1]).sort();
+  const listed = [...sitemap.matchAll(/<loc>https:\/\/cityjuggler\.com\/routes\/([^/<]+)\/<\/loc>/g)].map((m) => m[1]).sort();
   const dirs = readdirSync(new URL("routes/", root), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
   assert.deepEqual(listed, dirs, "run `npm run build-pages`");
   for (const d of dirs) assert.ok(existsSync(new URL(`routes/${d}/index.html`, root)));

@@ -8,8 +8,8 @@
 import "../js/airports.js";
 import "../js/lib.js";
 
-const { AIRLINES, googleFlightsUrl, indexAirports, addDays, todayISO } = globalThis.PlanMyTrip;
-const map = indexAirports(globalThis.PlanMyTripData.airports);
+const { AIRLINES, googleFlightsUrl, indexAirports, addDays, todayISO } = globalThis.CityJuggler;
+const map = indexAirports(globalThis.CityJugglerData.airports);
 const date = addDays(todayISO(), 30);
 const pax = { adults: 1 };
 

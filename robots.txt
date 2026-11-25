@@ -3,4 +3,4 @@ Allow: /
 Disallow: /tests/
 Disallow: /scripts/
 
-Sitemap: https://plan-my-trip.pages.dev/sitemap.xml
+Sitemap: https://cityjuggler.com/sitemap.xml

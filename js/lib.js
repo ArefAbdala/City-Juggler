@@ -1,6 +1,6 @@
 // Pure trip-planning logic: no DOM access, so it can be unit-tested in Node.
 // A plain script (not an ES module) so the page also works when index.html is opened
-// straight from disk (file://), where browsers block module scripts. Exposes globalThis.PlanMyTrip.
+// straight from disk (file://), where browsers block module scripts. Exposes globalThis.CityJuggler.
 (function () {
   "use strict";
 
@@ -800,10 +800,10 @@
 
   function itineraryToICS(itin, map, { cabin, pax, currency }, now = new Date()) {
     const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-    const out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Plan My Trip//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+    const out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//City Juggler//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
     itin.legs.forEach((l, i) => {
       out.push("BEGIN:VEVENT",
-        `UID:${itin.key.replace(/[^A-Z0-9]/gi, "")}-${i}@plan-my-trip`,
+        `UID:${itin.key.replace(/[^A-Z0-9]/gi, "")}-${i}@cityjuggler.com`,
         `DTSTAMP:${stamp}`,
         `DTSTART;VALUE=DATE:${icsDate(l.date)}`,
         `DTEND;VALUE=DATE:${icsDate(addDays(l.date, 1))}`,
@@ -815,7 +815,7 @@
     return out.map(icsFold).join("\r\n") + "\r\n";
   }
 
-  globalThis.PlanMyTrip = {
+  globalThis.CityJuggler = {
     isoLocal,
     parseISO,
     addDays,

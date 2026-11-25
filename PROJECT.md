@@ -1,8 +1,8 @@
-# Plan My Trip — Multi-Stop Itinerary Planner
+# City Juggler — Multi-Stop Itinerary Planner
 
 A fully static trip planning tool. Build multi-stop itineraries, get stopover recommendations, and search flights on Google Flights and airline websites — all client-side, no backend required.
 
-**Live:** [plan-my-trip.pages.dev](https://plan-my-trip.pages.dev)
+**Live:** [cityjuggler.com](https://cityjuggler.com) (the Cloudflare Pages project is still named `plan-my-trip`, so it is also served at plan-my-trip.pages.dev)
 
 ![Screenshot](screenshot.png)
 
@@ -49,7 +49,7 @@ No build step. Open `index.html` directly in a browser, or serve the folder with
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-Opening the file directly (`file://`) works because everything loads as plain `<script defer>` tags: browsers block ES modules and `fetch()` on `file://` pages. So keep it that way — don't switch to `import`/`export` or fetch JSON. `js/lib.js` publishes its functions as `globalThis.PlanMyTrip`, and the data scripts publish `globalThis.PlanMyTripData` (`airports`, `hubs`).
+Opening the file directly (`file://`) works because everything loads as plain `<script defer>` tags: browsers block ES modules and `fetch()` on `file://` pages. So keep it that way — don't switch to `import`/`export` or fetch JSON. `js/lib.js` publishes its functions as `globalThis.CityJuggler`, and the data scripts publish `globalThis.CityJugglerData` (`airports`, `hubs`).
 
 Tests use Node's built-in test runner (Node 18+), no dependencies:
 
@@ -83,14 +83,14 @@ This is a static site. Deploy to any static host:
 
 ### Search engines & security
 
-- **Indexing**: `index.html` has a canonical URL, description, Open Graph/Twitter tags and `WebApplication` structured data; `robots.txt` points to `sitemap.xml`. Search links (`?…`) all canonicalise to the home page. If the site moves to its own domain, replace `https://plan-my-trip.pages.dev` in `index.html`, `robots.txt`, `sitemap.xml` and `_headers`.
+- **Indexing**: `index.html` has a canonical URL, description, Open Graph/Twitter tags and `WebApplication` structured data; `robots.txt` points to `sitemap.xml`. Search links (`?…`) all canonicalise to the home page. The site lives at `https://cityjuggler.com`. If the domain ever changes, replace it in `index.html`, `robots.txt`, `_headers`, `tests/lib.test.js` and `SITE` in `scripts/build-pages.js`, then run `npm run build-pages`.
 - **Stopover route guides** (`routes/`): 80 static pages such as `/routes/london-to-sydney/`, each targeting searches like "London to Sydney stopover". They list the hub cities that split the trip (each leg at least a quarter of the distance) with the least extra distance, with flying times, fare estimates and links that open the planner pre-filled. `routes/index.html` links them all, and the home page links to it. They are generated from the app's own data by `npm run build-pages` (`scripts/build-pages.js`), which also rewrites `sitemap.xml`. The output is committed because the host has no build step, so **re-run it after changing airports, hubs, fares or the route list** (`ROUTES` in the script), and don't hand-edit `routes/` or `sitemap.xml`.
 - **Titles and descriptions** are kept under ~65 and ~160 characters so Google shows them in full.
 - **Caching** (`_headers`): images and icons are cached for a week; JS and CSS revalidate hourly, since their filenames don't change between versions.
 - **404 page**: `404.html` makes unknown paths return a real 404 (without it Cloudflare Pages serves the home page for every URL, which Google reports as soft 404s).
 - **Preview deployments** (`<hash>.plan-my-trip.pages.dev`) send `X-Robots-Tag: noindex` so only the production URL is indexed.
 - **Security headers** (`_headers`): a strict Content-Security-Policy (`'self'` only — no inline scripts or `style="…"` attributes, so keep JS and CSS in their files; JSON-LD is fine because it isn't executed), HSTS, `nosniff`, no framing, a strict referrer policy and a Permissions-Policy that turns off camera, microphone, location and payments. If you add a third-party script, font or API, add its origin to the CSP.
-- **Google Search Console**: add the site as a URL-prefix property (`https://plan-my-trip.pages.dev/`), verify with the HTML-tag method (paste the `google-site-verification` meta tag into `<head>`) or by uploading Google's verification file to the repo root, then submit `sitemap.xml` and use URL Inspection → Request indexing.
+- **Google Search Console**: add the site as a URL-prefix property (`https://cityjuggler.com/`), verify with the HTML-tag method (paste the `google-site-verification` meta tag into `<head>`) or by uploading Google's verification file to the repo root, then submit `sitemap.xml` and use URL Inspection → Request indexing.
 
 ## Files
 
@@ -105,7 +105,7 @@ This is a static site. Deploy to any static host:
 | `favicon.svg`, `apple-touch-icon.png`, `icon-512.png`, `site.webmanifest` | Icons and web app manifest |
 | `og-image.jpg` | 1200×630 preview image for search and social shares |
 | `styles.css` | All styles, including the mobile layout |
-| `js/lib.js` | Pure logic (no DOM), exposed as `globalThis.PlanMyTrip`: airport search, scheduling, hub suggestions, cost estimates, booking links, URL state, text/ICS export |
+| `js/lib.js` | Pure logic (no DOM), exposed as `globalThis.CityJuggler`: airport search, scheduling, hub suggestions, cost estimates, booking links, URL state, text/ICS export |
 | `js/app.js` | UI: form, autocomplete, rendering, sharing, local storage |
 | `js/airports.js` | 524 airports with IATA codes, names, cities, countries, lat/lon |
 | `js/hubs.js` | 110 major hub airports with region tags, used for stop suggestions |

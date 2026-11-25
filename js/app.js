@@ -9,12 +9,13 @@ const {
   estimateFlightMinutes, formatDuration, countryName, dist,
   countryList, searchPlaces, resolvePlace, avoidChecker, avoidLabel, MAX_AVOID,
   RATES_AS_OF, sameDayConnections,
-} = globalThis.PlanMyTrip;
+} = globalThis.CityJuggler;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const extIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>`;
-const STORAGE_KEY = "plan-my-trip:last-search";
+const STORAGE_KEY = "city-juggler:last-search";
+const OLD_STORAGE_KEY = "plan-my-trip:last-search"; // before the rename to City Juggler
 const MAX_ALTS = 3, MAX_STOPS = 4, TOP_AIRLINES = 4;
 
 let airports = [], airportMap = {}, hubs = [], hubSet = new Set(), countries = [], dataReady = false;
@@ -102,7 +103,7 @@ $("swap").addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // Loaded by js/airports.js and js/hubs.js (scripts, not fetched JSON, so file:// works too).
 const dataLoaded = Promise.resolve().then(() => {
-  const { airports: ap, hubs: hb } = globalThis.PlanMyTripData || {};
+  const { airports: ap, hubs: hb } = globalThis.CityJugglerData || {};
   if (!Array.isArray(ap) || !Array.isArray(hb)) throw new Error("airport data scripts didn't load");
   airports = ap; airportMap = indexAirports(ap); hubs = hb; hubSet = new Set(hb.map((h) => h.code));
   countries = countryList(ap); dataReady = true; renderAvoid();
@@ -339,7 +340,7 @@ function applyState(s) {
 const scrollBehavior = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
 const storage = {
-  get() { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } },
+  get() { try { return localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(OLD_STORAGE_KEY); } catch { return null; } },
   set(v) { try { localStorage.setItem(STORAGE_KEY, v); } catch { /* storage unavailable */ } },
 };
 
@@ -568,7 +569,7 @@ $("results").addEventListener("click", async (e) => {
     syncToggleAll();
   } else if (btn.dataset.action === "share") {
     if (navigator.share && matchMedia("(pointer: coarse)").matches) {
-      try { await navigator.share({ title: "Plan My Trip", url: location.href }); return; } catch { /* cancelled: fall through to copy */ }
+      try { await navigator.share({ title: "City Juggler", url: location.href }); return; } catch { /* cancelled: fall through to copy */ }
     }
     flash(btn, (await copyText(location.href)) ? "Link copied ✓" : "Copy failed");
   } else if (btn.dataset.action === "copy") {
