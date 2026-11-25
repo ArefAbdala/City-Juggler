@@ -5,6 +5,7 @@
   "description": "Static multi-stop trip planner. No build step; package.json only holds dev scripts.",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check-links": "node scripts/check-links.js"
+    "check-links": "node scripts/check-links.js",
+    "build-pages": "node scripts/build-pages.js"
   }
 }

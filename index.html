@@ -5,8 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
 <meta name="theme-color" content="#0f1216" media="(prefers-color-scheme: dark)" />
-<meta name="description" content="Plan multi-stop trips, get stopover suggestions and book each leg on Google Flights or directly with airlines." />
-<title>Plan My Trip</title>
+<meta name="description" content="Free multi-stop trip planner: add up to 4 city stops, get stopover suggestions along your route, compare estimated fares and book each leg on Google Flights." />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<title>Plan My Trip — Free Multi-Stop Itinerary &amp; Stopover Planner</title>
+<link rel="canonical" href="https://plan-my-trip.pages.dev/" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="manifest" href="site.webmanifest" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Plan My Trip" />
+<meta property="og:title" content="Plan My Trip — Multi-Stop Itinerary &amp; Stopover Planner" />
+<meta property="og:description" content="Build multi-stop trips, get stopover city suggestions and book each leg on Google Flights or airline websites. Free, no sign-up." />
+<meta property="og:url" content="https://plan-my-trip.pages.dev/" />
+<meta property="og:image" content="https://plan-my-trip.pages.dev/og-image.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Plan My Trip — multi-stop itinerary planner" />
+<meta name="twitter:card" content="summary_large_image" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Plan My Trip",
+  "url": "https://plan-my-trip.pages.dev/",
+  "description": "Free multi-stop trip planner with stopover suggestions, fare estimates and booking links for each leg.",
+  "applicationCategory": "TravelApplication",
+  "operatingSystem": "Any (web browser)",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
 <link rel="stylesheet" href="styles.css" />
 <script defer src="js/airports.js"></script>
 <script defer src="js/hubs.js"></script>
@@ -88,6 +117,23 @@
 
   <div id="banner" role="status" aria-live="polite"></div>
   <div id="results" tabindex="-1"></div>
+  <section class="about" aria-labelledby="about-title">
+    <h2 id="about-title">Plan a multi-stop trip in minutes</h2>
+    <p>Plan My Trip is a free planner for trips with several cities. Enter where you start and finish, add up to four city stops — or let it suggest stopover cities along your route — and get at least eight itinerary options sorted by estimated cost. Each leg links to Google Flights and to the airlines that fly it, so you can book every flight separately.</p>
+    <details>
+      <summary>How are stopover cities suggested?</summary>
+      <p>Stops are picked from 110 major hub airports, ranked by how small a detour they add between the neighbouring points of your route. You can prefer the same or a different country, choose a continent, and list cities, airports or countries to avoid.</p>
+    </details>
+    <details>
+      <summary>Are the prices real?</summary>
+      <p>No — they are rough distance-based estimates to help you compare routes. Real prices and availability are shown on Google Flights and airline websites. Always confirm before booking.</p>
+    </details>
+    <details>
+      <summary>Do I need an account? Is my data stored?</summary>
+      <p>No account is needed. Everything runs in your browser; your last search is saved only in your own browser, and nothing is sent to a server.</p>
+    </details>
+    <p class="more"><a href="routes/">Stopover guides for popular long-haul routes</a> — London to Sydney, New York to Bangkok, Los Angeles to Auckland and more.</p>
+  </section>
   <footer>This tool plans your itinerary and generates booking links. Prices are rough distance-based estimates (approximate exchange rates as of Nov 2026); real prices and availability are shown on Google Flights and airline websites. Always confirm before booking.</footer>
 </main>
 </body>
