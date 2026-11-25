@@ -8,6 +8,7 @@ const {
   serializeState, parseState, itineraryToText, itineraryToICS,
   estimateFlightMinutes, formatDuration, countryName, dist,
   countryList, searchPlaces, resolvePlace, avoidChecker, avoidLabel, MAX_AVOID,
+  RATES_AS_OF, sameDayConnections,
 } = globalThis.PlanMyTrip;
 
 const $ = (id) => document.getElementById(id);
@@ -19,6 +20,7 @@ const MAX_ALTS = 3, MAX_STOPS = 4, TOP_AIRLINES = 4;
 let airports = [], airportMap = {}, hubs = [], hubSet = new Set(), countries = [], dataReady = false;
 let depAlts = [], arrAlts = [], stops = [], avoid = [];
 let lastResults = null; // { itineraries, opts }
+let sortBy = "cost";
 
 // ---------------------------------------------------------------------------
 // Banner
@@ -37,14 +39,30 @@ fillSelect($("adults"), 1, 9, 1);
 $("currency").innerHTML = Object.keys(CURRENCIES).map((c) => `<option>${c}</option>`).join("");
 
 
-const today = todayISO();
+// "Today" is re-read whenever it matters, so a tab left open past midnight doesn't keep
+// accepting yesterday's date.
+let today = todayISO();
+function refreshToday() {
+  const now = todayISO();
+  if (now === today) return;
+  today = now;
+  $("depart").min = today;
+  $("ret").min = $("depart").value > today ? $("depart").value : today;
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshToday(); });
+window.addEventListener("focus", refreshToday);
 $("depart").min = $("ret").min = today;
 $("depart").value = addDays(today, 21);
 $("ret").value = addDays(today, 28);
 $("depart").addEventListener("change", () => {
-  $("ret").min = $("depart").value || today;
-  if ($("ret").value && $("ret").value < $("depart").value) $("ret").value = $("depart").value;
-  document.querySelectorAll(".stop-date").forEach((i) => { i.min = $("depart").value; });
+  const dep = $("depart").value;
+  $("ret").min = dep || today;
+  if ($("ret").value && dep && $("ret").value < dep) $("ret").value = dep;
+  // Stop dates now before the departure date can't be right: clear them (they'll be spread out).
+  let cleared = false;
+  stops.forEach((st) => { if (dep && st.date && st.date < dep) { st.date = ""; cleared = true; } });
+  if (cleared) renderStops();
+  document.querySelectorAll(".stop-date").forEach((i) => { i.min = dep; });
 });
 
 const returnHome = () => $("return-home").checked;
@@ -74,6 +92,9 @@ $("return-home").addEventListener("change", () => { renderAlts("arr"); });
 
 $("swap").addEventListener("click", () => {
   const o = $("origin").value; $("origin").value = $("destination").value; $("destination").value = o;
+  // Alternates swap with their airport.
+  [depAlts, arrAlts] = [arrAlts, depAlts];
+  renderAlts("dep"); renderAlts("arr");
 });
 
 // ---------------------------------------------------------------------------
@@ -95,7 +116,7 @@ const dataLoaded = Promise.resolve().then(() => {
 // ---------------------------------------------------------------------------
 // Autocomplete (ARIA combobox)
 // ---------------------------------------------------------------------------
-const airportItems = (q) => searchAirports(airports, q, 8, hubSet).map((a) => ({ value: a.iata, code: a.iata, detail: `${a.city}, ${a.country} — ${a.name}` }));
+const airportItems = (q) => searchAirports(airports, q, 8, hubSet, airportMap).map((a) => ({ value: a.iata, code: a.iata, detail: `${a.city}, ${a.country} — ${a.name}` }));
 
 /** `onPick(value)` fires on typing and on picking; `onSelect(value)` only when a suggestion is picked. */
 function setupAutocomplete(input, list, onPick, { search = airportItems, onSelect = null } = {}) {
@@ -123,7 +144,13 @@ function setupAutocomplete(input, list, onPick, { search = airportItems, onSelec
 
   input.addEventListener("input", () => { active = -1; items = search(input.value); render(); onPick && onPick(input.value); });
   input.addEventListener("keydown", (e) => {
-    if (!list.classList.contains("show")) return;
+    if (!list.classList.contains("show")) {
+      // ArrowDown reopens the suggestions for what's already typed.
+      if (e.key === "ArrowDown" && input.value.trim()) { e.preventDefault(); items = search(input.value); active = items.length ? 0 : -1; render(); }
+      return;
+    }
+    // Tab accepts the highlighted suggestion and moves on as usual.
+    if (e.key === "Tab" && active >= 0) { pick(items[active].value); return; }
     if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, items.length - 1); render(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); render(); }
     else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active].value); }
@@ -298,6 +325,8 @@ function applyState(s) {
   updateReturnHome();
 }
 
+const scrollBehavior = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
+
 const storage = {
   get() { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } },
   set(v) { try { localStorage.setItem(STORAGE_KEY, v); } catch { /* storage unavailable */ } },
@@ -308,6 +337,7 @@ const storage = {
 // ---------------------------------------------------------------------------
 function plan() {
   if (!dataReady) return;
+  refreshToday();
   const s = readState();
   const resolve = (v) => resolveAirport(airportMap, airports, v, hubSet);
   const errors = [];
@@ -343,7 +373,7 @@ function plan() {
   const dateErr = s.depart && validateStopDates(s.depart, s.end, s.stops.map((st) => (st.mode === "fixed" ? st.date : "")), endUsed());
   if (dateErr) errors.push(dateErr);
 
-  if (errors.length) { showBanner(errors); $("banner").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+  if (errors.length) { showBanner(errors); $("banner").scrollIntoView({ behavior: scrollBehavior(), block: "center" }); return; }
 
   // Show the resolved codes so the user sees what was matched.
   $("origin").value = origin; if (dest) $("destination").value = dest;
@@ -369,7 +399,7 @@ function plan() {
   history.replaceState(null, "", `${location.pathname}?${query}`);
 
   const target = warnings.length ? $("banner") : $("results");
-  target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  target.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   $("results").focus({ preventScroll: true });
 }
 
@@ -392,29 +422,49 @@ function syncToggleAll() {
 // "toggle" doesn't bubble, so listen in the capture phase.
 $("results").addEventListener("toggle", (e) => { if (e.target.classList?.contains("itin-details")) syncToggleAll(); }, true);
 
-function renderItineraries(itineraries, opts) {
-  lastResults = { itineraries, opts };
+const SORTS = {
+  cost: { label: "Cheapest first", key: (it) => [it.totalCost] },
+  flights: { label: "Fewest flights", key: (it) => [it.legs.length, it.totalCost] },
+  time: { label: "Shortest flying time", key: (it) => [it.flyingMins ?? Infinity, it.totalCost] },
+};
+function sortItineraries(list, by) {
+  const key = (SORTS[by] || SORTS.cost).key;
+  return [...list].sort((a, b) => { const x = key(a), y = key(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; });
+}
+
+function renderItineraries(found, opts) {
+  found.forEach((it) => {
+    const mins = it.legs.map((l) => estimateFlightMinutes(airportMap, l.from, l.to));
+    it.flyingMins = mins.every((m) => m != null) ? mins.reduce((a, b) => a + b, 0) : null;
+  });
+  const itineraries = sortItineraries(found, sortBy);
+  lastResults = { itineraries, found, opts };
   if (!itineraries.length) {
     $("results").innerHTML = `<div class="empty">No itineraries found. Try adjusting your stops or airports.</div>`;
     return;
   }
   const { cabin, pax, currency } = opts;
+  const cheapestCost = Math.min(...itineraries.map((it) => it.totalCost));
+  const sortSelect = itineraries.length > 1 ? `<label class="sort-field"><span>Sort</span><select id="sort-by">${
+    Object.entries(SORTS).map(([v, s]) => `<option value="${v}"${v === sortBy ? " selected" : ""}>${s.label}</option>`).join("")}</select></label>` : "";
   let html = `<div class="bar">
-    <div class="meta">${itineraries.length} itinerar${itineraries.length === 1 ? "y" : "ies"} found · cheapest first${
+    <div class="meta">${itineraries.length} itinerar${itineraries.length === 1 ? "y" : "ies"} found · ${esc((SORTS[sortBy] || SORTS.cost).label.toLowerCase())}${
       itineraries.some((it) => it.legs.some((l) => l.suggested)) ? " · each with different stopover cities" : ""}${
       opts.avoid && opts.avoid.length ? `<br>Avoiding: ${esc(opts.avoid.map((x) => avoidLabel(airportMap, airports, x)).join(", "))}` : ""}</div>
     <div class="bar-actions">
+      ${sortSelect}
       <button type="button" class="ghost-btn" data-action="toggle-all" aria-controls="results">Expand all</button>
       <button type="button" class="ghost-btn" data-action="share">Copy link to this search</button>
     </div>
   </div>`;
 
   itineraries.forEach((itin, idx) => {
-    const cheapest = idx === 0 && itineraries.length > 1;
+    const cheapest = itineraries.length > 1 && itin.totalCost === cheapestCost && itineraries.findIndex((it) => it.totalCost === cheapestCost) === idx;
+    const sameDay = new Set(sameDayConnections(itin));
     const routeStr = itin.codes.map((c) => airportLabel(airportMap, c)).join(" → ");
     const first = itin.legs[0].date, last = itin.legs[itin.legs.length - 1].date;
     const legMins = itin.legs.map((l) => estimateFlightMinutes(airportMap, l.from, l.to));
-    const totalMins = legMins.every((m) => m != null) ? legMins.reduce((a, b) => a + b, 0) : null;
+    const totalMins = itin.flyingMins;
     html += `<article class="itin-card${cheapest ? " best-card" : ""}" aria-label="Itinerary ${idx + 1}">
       <div class="itin-header">
         <div>
@@ -444,6 +494,7 @@ function renderItineraries(itineraries, opts) {
           <div><dt>From</dt><dd>${airportDetail(leg.from)}</dd></div>
           <div><dt>To</dt><dd>${airportDetail(leg.to)}</dd></div>
         </dl>
+        ${sameDay.has(i) ? `<div class="sub same-day">⚠ Same day as flight ${i}. These are separate bookings, so a delay won't be covered: leave at least 3 hours to connect (more for international flights or if you have checked bags).</div>` : ""}
         <div class="itin-leg-cost">~${esc(formatMoney(leg.cost || 0, currency))} estimated</div>
         <div class="book-links">
           <a class="book-link gf" href="${esc(googleFlightsUrl(leg.from, leg.to, leg.date, cabin, pax, currency))}" target="_blank" rel="noopener noreferrer">Google Flights ${extIcon}</a>
@@ -460,7 +511,7 @@ function renderItineraries(itineraries, opts) {
           <button type="button" class="ghost-btn" data-action="copy" data-idx="${idx}">Copy as text</button>
           <button type="button" class="ghost-btn" data-action="ics" data-idx="${idx}">Add to calendar (.ics)</button>
         </div>
-        <div class="sub">Estimates are approximate — open the links for live prices. Each flight is booked separately.</div>
+        <div class="sub">Estimates are approximate (exchange rates as of ${esc(RATES_AS_OF)}) — open the links for live prices. Each flight is booked separately.</div>
       </div></article>`;
   });
   $("results").innerHTML = html;
@@ -480,6 +531,16 @@ function flash(btn, msg) {
   const old = btn.textContent; btn.textContent = msg; btn.disabled = true;
   setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1600);
 }
+
+$("results").addEventListener("change", (e) => {
+  if (e.target.id !== "sort-by" || !lastResults) return;
+  sortBy = e.target.value;
+  const open = new Set([...$("results").querySelectorAll(".itin-details")].map((d, i) => (d.open ? lastResults.itineraries[i].key : null)).filter(Boolean));
+  renderItineraries(lastResults.found, lastResults.opts);
+  $("results").querySelectorAll(".itin-details").forEach((d, i) => { d.open = open.has(lastResults.itineraries[i].key); });
+  syncToggleAll();
+  $("sort-by").focus();
+});
 
 $("results").addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action]");

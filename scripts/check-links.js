@@ -18,7 +18,9 @@ const SAMPLE = { aircanada: ["YYZ", "YVR"], british: ["LHR", "JFK"], lufthansa: 
   turkish: ["IST", "JFK"], emirates: ["DXB", "JFK"], qatar: ["DOH", "JFK"], singapore: ["SIN", "LHR"], cathay: ["HKG", "LHR"],
   ryanair: ["STN", "DUB"], easyjet: ["LGW", "BCN"], wizz: ["LTN", "BUD"], vueling: ["BCN", "LGW"], pegasus: ["SAW", "BER"],
   flydubai: ["DXB", "BKK"], westjet: ["YYZ", "YVR"], flair: ["YYZ", "YVR"], volaris: ["MEX", "CUN"], indigo: ["DEL", "BOM"],
-  airasia: ["KUL", "BKK"], scoot: ["SIN", "SYD"], jetstar: ["SYD", "MEL"] };
+  airasia: ["KUL", "BKK"], scoot: ["SIN", "SYD"], jetstar: ["SYD", "MEL"],
+  iberia: ["MAD", "JFK"], tap: ["LIS", "JFK"], aerlingus: ["DUB", "JFK"], ana: ["NRT", "LAX"], jal: ["HND", "LAX"],
+  qantas: ["SYD", "LAX"], airindia: ["DEL", "JFK"], spirit: ["FLL", "ATL"], norse: ["JFK", "LGW"] };
 
 const targets = [
   { name: "Google Flights", url: googleFlightsUrl("JFK", "LAX", date, "economy", pax) },
