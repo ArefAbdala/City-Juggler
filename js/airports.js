@@ -1,6 +1,6 @@
 // Airports (IATA code, name, city, country, lat/lon).
 // A script rather than JSON so it loads when index.html is opened from disk (file://).
-(globalThis.PlanMyTripData ||= {}).airports =
+(globalThis.CityJugglerData ||= {}).airports =
 [
 {"iata":"AAL","name":"Aalborg Airport","city":"Aalborg","country":"DK","lat":57.0926,"lon":9.8492},
 {"iata":"AAR","name":"Aarhus Airport","city":"Aarhus","country":"DK","lat":56.3000,"lon":10.6190},

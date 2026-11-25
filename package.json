@@ -1,5 +1,5 @@
 {
-  "name": "plan-my-trip",
+  "name": "city-juggler",
   "private": true,
   "type": "module",
   "description": "Static multi-stop trip planner. No build step; package.json only holds dev scripts.",

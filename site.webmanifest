@@ -1,6 +1,6 @@
 {
-  "name": "Plan My Trip",
-  "short_name": "Plan My Trip",
+  "name": "City Juggler",
+  "short_name": "City Juggler",
   "description": "Multi-stop itinerary and stopover planner.",
   "start_url": "/",
   "display": "standalone",

@@ -11,10 +11,10 @@ import "../js/airports.js";
 import "../js/hubs.js";
 import "../js/lib.js";
 
-const SITE = "https://plan-my-trip.pages.dev";
+const SITE = "https://cityjuggler.com";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const L = globalThis.PlanMyTrip;
-const { airports, hubs } = globalThis.PlanMyTripData;
+const L = globalThis.CityJuggler;
+const { airports, hubs } = globalThis.CityJugglerData;
 const map = L.indexAirports(airports);
 const TODAY = L.todayISO();
 
@@ -69,7 +69,7 @@ const page = ({ title, description, path, body, jsonld }) => `<!DOCTYPE html>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <meta property="og:type" content="article" />
-<meta property="og:site_name" content="Plan My Trip" />
+<meta property="og:site_name" content="City Juggler" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(description)}" />
 <meta property="og:url" content="${SITE}${path}" />
@@ -82,7 +82,7 @@ ${JSON.stringify(jsonld, null, 1)}
 </head>
 <body>
 <header>
-  <p class="site-name"><a href="/">✈ Plan My Trip</a></p>
+  <p class="site-name"><a href="/">✈ City Juggler</a></p>
 </header>
 <main class="guide">
 ${body}
@@ -149,7 +149,7 @@ ${rows.map((x) => `      <tr><th scope="row">${esc(x.city)} (${x.code})<span cla
   <ol>
     <li><strong>Pick your stopover.</strong> ${esc(rows.slice(0, 3).map((x) => x.city).join(", "))} are the most direct choices on this route.</li>
     <li><strong>Choose your dates.</strong> Decide how many nights to spend in the stopover city — 2 to 4 nights is typical.</li>
-    <li><strong>Book each leg.</strong> Plan My Trip links every flight to Google Flights and the airlines likely to fly it. Separate tickets are not protected if a delay makes you miss the next flight, so leave a day or more between legs.</li>
+    <li><strong>Book each leg.</strong> City Juggler links every flight to Google Flights and the airlines likely to fly it. Separate tickets are not protected if a delay makes you miss the next flight, so leave a day or more between legs.</li>
   </ol>
   <p>Some airlines also sell multi-city tickets or free stopover programmes through their hub, which keep both flights on one booking — worth comparing with separate tickets.</p>
 ${related.length ? `
@@ -161,12 +161,12 @@ ${related.map((o) => `    <li><a href="/routes/${o.slug}/">${esc(city(o.from))} 
 <footer>Distances are great-circle; flying times assume about 800 km/h plus 30 minutes for take-off and landing. Prices are rough estimates — always confirm before booking.</footer>`;
   const jsonld = { "@context": "https://schema.org", "@graph": [
     { "@type": "Article", headline: title, description, url: `${SITE}${path}`, dateModified: TODAY, image: `${SITE}/og-image.jpg`,
-      author: { "@type": "Organization", name: "Plan My Trip", url: `${SITE}/` }, publisher: { "@type": "Organization", name: "Plan My Trip", url: `${SITE}/` } },
+      author: { "@type": "Organization", name: "City Juggler", url: `${SITE}/` }, publisher: { "@type": "Organization", name: "City Juggler", url: `${SITE}/` } },
     breadcrumbs(crumbs),
   ] };
   const file = join(ROOT, "routes", slug, "index.html");
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, page({ title: `${A} to ${B} Stopover: Best Cities | Plan My Trip`, description, path, body, jsonld }));
+  writeFileSync(file, page({ title: `${A} to ${B} Stopover: Best Cities | City Juggler`, description, path, body, jsonld }));
 }
 
 // Index of all routes, grouped by departure city
@@ -191,7 +191,7 @@ ${list.map((o) => `    <li><a href="/routes/${o.slug}/">${esc(city(o.from))} to 
   ] };
   mkdirSync(join(ROOT, "routes"), { recursive: true });
   writeFileSync(join(ROOT, "routes", "index.html"), page({
-    title: "Stopover Guides for Long-Haul Flights | Plan My Trip",
+    title: "Stopover Guides for Long-Haul Flights | City Juggler",
     description: `Stopover guides for ${built.length} popular long-haul routes — the best cities to break up your journey, with flying times and estimated fares.`,
     path, body, jsonld,
   }));
